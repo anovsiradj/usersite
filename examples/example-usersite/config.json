@@ -1,0 +1,21 @@
+{
+  "name": "Example Website Customization",
+  "description": "A simple example configuration",
+  "matches": [
+    "*://example.com/*",
+    "*://*.example.com/*"
+  ],
+  "css": [
+    {
+      "path": "style.css",
+      "inject": "head"
+    }
+  ],
+  "js": [
+    {
+      "path": "script.js",
+      "runAt": "document_end"
+    }
+  ],
+  "enabled": true
+}

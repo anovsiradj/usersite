@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "UserWeb",
+  "version": "1.0.0",
+  "description": "Minimalist extension to inject custom JS and CSS files into websites",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "userScripts"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background-simple.js"
+  },
+  "action": {
+    "default_popup": "dashboard.html",
+    "default_title": "UserWeb Dashboard",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "options_page": "dashboard.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+    "sandbox": "sandbox allow-scripts; script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: data:; object-src 'self'"
+  },
+  "sandbox": {
+    "pages": ["sandbox.html"]
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["sandbox.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "userweb@example.com",
+      "strict_min_version": "109.0"
+    }
+  }
+}

@@ -1,0 +1,437 @@
+// Background script for UserWeb extension (simplified, no ES modules)
+// Manages extension state and handles file/config loading
+
+// Browser API compatibility (chrome/browser)
+const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+
+// Config Manager (inline for compatibility)
+class ConfigManager {
+  constructor() {
+    this.configs = new Map();
+  }
+
+  async loadAllConfigs() {
+    try {
+      const result = await browserAPI.storage.local.get(['userweb_configs']);
+      if (result.userweb_configs) {
+        this.configs = new Map(result.userweb_configs);
+      }
+    } catch (error) {
+      console.error('Error loading configs:', error);
+    }
+  }
+
+  async saveAllConfigs() {
+    try {
+      const configsArray = Array.from(this.configs.entries());
+      await browserAPI.storage.local.set({ userweb_configs: configsArray });
+    } catch (error) {
+      console.error('Error saving configs:', error);
+    }
+  }
+
+  async addConfig(configId, config) {
+    if (!this.validateConfig(config)) {
+      throw new Error('Invalid config format');
+    }
+    config.id = configId;
+    config.enabled = config.enabled !== undefined ? config.enabled : true;
+    this.configs.set(configId, config);
+    await this.saveAllConfigs();
+    return config;
+  }
+
+  getConfig(configId) {
+    return this.configs.get(configId);
+  }
+
+  getAllConfigs() {
+    const configsArray = Array.from(this.configs.values());
+    return Promise.resolve(configsArray);
+  }
+
+  async getConfigForUrl(url) {
+    try {
+      const urlObj = new URL(url);
+      for (const config of this.configs.values()) {
+        if (!config.enabled) continue;
+        if (this.matchesUrl(config, urlObj)) {
+          return config;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting config for URL:', error);
+      return null;
+    }
+  }
+
+  matchesUrl(config, urlObj) {
+    if (!config.matches || !Array.isArray(config.matches)) {
+      return false;
+    }
+    return config.matches.some(pattern => {
+      return this.matchPattern(pattern, urlObj);
+    });
+  }
+
+  matchPattern(pattern, urlObj) {
+    try {
+      const [scheme, rest] = pattern.split('://');
+      if (!rest) return false;
+      const schemePattern = scheme === '*' ? '[^:]+' : scheme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const [host, path] = rest.split('/', 2);
+      let hostPattern = host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                            .replace(/\\\*/g, '.*')
+                            .replace(/\\\?/g, '.');
+      const pathPattern = path ? path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                                     .replace(/\\\*/g, '.*')
+                                     .replace(/\\\?/g, '.') : '.*';
+      const regex = new RegExp(`^${schemePattern}://${hostPattern}/${pathPattern}$`);
+      return regex.test(urlObj.href);
+    } catch (error) {
+      console.error('Error matching pattern:', pattern, error);
+      return false;
+    }
+  }
+
+  async toggleConfig(configId, enabled) {
+    const config = this.configs.get(configId);
+    if (config) {
+      config.enabled = enabled;
+      await this.saveAllConfigs();
+    }
+  }
+
+  async deleteConfig(configId) {
+    this.configs.delete(configId);
+    await this.saveAllConfigs();
+  }
+
+  validateConfig(config) {
+    if (!config || typeof config !== 'object') return false;
+    if (!config.name || typeof config.name !== 'string') return false;
+    if (!config.matches || !Array.isArray(config.matches) || config.matches.length === 0) return false;
+    if ((!config.js || !Array.isArray(config.js) || config.js.length === 0) &&
+        (!config.css || !Array.isArray(config.css) || config.css.length === 0)) {
+      return false;
+    }
+    return true;
+  }
+}
+
+const configManager = new ConfigManager();
+const userScriptsRegistry = new Map();
+
+// Load configs on startup
+configManager.loadAllConfigs().catch(err => {
+  console.error('Error loading configs on startup:', err);
+});
+
+// Initialize extension
+browserAPI.runtime.onInstalled.addListener(async () => {
+  console.log('UserWeb extension installed');
+  await configManager.loadAllConfigs();
+});
+
+// Also load on startup (for when extension is already installed)
+browserAPI.runtime.onStartup.addListener(async () => {
+  console.log('UserWeb extension started');
+  await configManager.loadAllConfigs();
+});
+
+// Handle messages from content scripts and dashboard
+browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'GET_CONFIGS') {
+    configManager.getAllConfigs()
+      .then(configs => {
+        sendResponse({ success: true, configs });
+      })
+      .catch(error => {
+        console.error('Error getting configs:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (message.type === 'TOGGLE_CONFIG') {
+    configManager.toggleConfig(message.configId, message.enabled)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch(error => {
+        console.error('Error toggling config:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (message.type === 'DELETE_CONFIG') {
+    configManager.deleteConfig(message.configId)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch(error => {
+        console.error('Error deleting config:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (message.type === 'ADD_CONFIG') {
+    configManager.addConfig(message.configId, message.config).then(() => {
+      sendResponse({ success: true });
+    }).catch((error) => {
+      sendResponse({ success: false, error: error.message });
+    });
+    return true;
+  }
+
+  if (message.type === 'RELOAD_CONFIGS') {
+    configManager.loadAllConfigs()
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch(error => {
+        console.error('Error reloading configs:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (message.type === 'GET_CONFIG') {
+    configManager.getConfigForUrl(message.url)
+      .then(config => {
+        sendResponse({ success: true, config });
+      })
+      .catch(error => {
+        console.error('Error getting config for URL:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (message.type === 'INJECT_JS') {
+    injectJSFile(message.configId, message.jsFileName, message.runAt || 'document_idle', message.tabId || sender.tab?.id).then(() => {
+      sendResponse({ success: true });
+    }).catch((error) => {
+      sendResponse({ success: false, error: error.message });
+    });
+    return true;
+  }
+
+  if (message.type === 'GET_TAB_ID') {
+    // Get tab ID from the sender
+    const tabId = sender.tab?.id;
+    if (tabId) {
+      sendResponse({ success: true, tabId: tabId });
+    } else {
+      // Fallback: try to get active tab
+      browserAPI.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs && tabs[0]) {
+          sendResponse({ success: true, tabId: tabs[0].id });
+        } else {
+          sendResponse({ success: false, error: 'Could not determine tab ID' });
+        }
+      });
+      return true; // Async response
+    }
+  }
+});
+
+function normalizeRunAt(runAt) {
+  const allowed = ['document_start', 'document_end', 'document_idle'];
+  if (!runAt || typeof runAt !== 'string') {
+    return 'document_idle';
+  }
+  if (allowed.indexOf(runAt) !== -1) {
+    return runAt;
+  }
+  return 'document_idle';
+}
+
+async function injectJSFile(configId, jsFileName, runAt, tabId) {
+  if (!tabId) {
+    throw new Error('Tab ID is required for JS injection');
+  }
+
+  const storageKey = `userweb_files_${configId}`;
+  const result = await browserAPI.storage.local.get(storageKey);
+  const files = result[storageKey] || {};
+  
+  if (!files[jsFileName]) {
+    throw new Error(`JS file not found: ${jsFileName}`);
+  }
+
+  const jsContent = files[jsFileName].split(',')[1];
+  const decodedJS = atob(jsContent);
+
+  const normalizedRunAt = normalizeRunAt(runAt);
+
+  let injectImmediately = false;
+  if (normalizedRunAt === 'document_start') {
+    injectImmediately = true;
+  }
+
+  try {
+    if (typeof chrome !== 'undefined' && chrome.userScripts && chrome.userScripts.register) {
+      const config = configManager.getConfig(configId);
+      if (!config || !config.matches || !config.matches.length) {
+        throw new Error('Config not found for userScripts');
+      }
+      const scriptKey = `${configId}:${jsFileName}`;
+      if (userScriptsRegistry.has(scriptKey)) {
+        return;
+      }
+      const scriptId = `userweb_${configId}_${jsFileName}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      await new Promise((resolve, reject) => {
+        chrome.userScripts.register([{
+          id: scriptId,
+          matches: config.matches,
+          js: [{ code: decodedJS }],
+          runAt: normalizedRunAt
+        }], () => {
+          const err = chrome.runtime.lastError;
+          if (err) {
+            if (err.message && err.message.includes('Duplicate script ID')) {
+              userScriptsRegistry.set(scriptKey, scriptId);
+              resolve();
+            } else {
+              reject(new Error(err.message));
+            }
+          } else {
+            userScriptsRegistry.set(scriptKey, scriptId);
+            resolve();
+          }
+        });
+      });
+      return;
+    }
+
+    if (browserAPI.scripting) {
+      const injectViaSandboxFunction = function(configIdParam, fileNameParam, codeString, sandboxUrl) {
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        iframe.sandbox = 'allow-scripts allow-same-origin';
+        iframe.src = sandboxUrl;
+
+        const injectionId = `userweb-${configIdParam}-${fileNameParam}-${Date.now()}`;
+
+        const messageHandler = (event) => {
+          if (!event.data) return;
+          if (event.data.type === 'SANDBOX_READY') {
+            if (iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                type: 'LOAD_SCRIPT',
+                code: codeString,
+                id: injectionId
+              }, '*');
+            }
+          } else if (event.data.type === 'SCRIPT_LOADED' && event.data.id === injectionId) {
+            window.removeEventListener('message', messageHandler);
+            setTimeout(() => {
+              if (iframe.parentNode) {
+                iframe.parentNode.removeChild(iframe);
+              }
+            }, 1000);
+            if (!event.data.success) {
+              console.error(`Failed to load script in sandbox: ${event.data.error}`);
+            }
+          }
+        };
+
+        window.addEventListener('message', messageHandler);
+
+        const inject = () => {
+          if (document.body) {
+            document.body.appendChild(iframe);
+          } else if (document.head) {
+            document.head.appendChild(iframe);
+          } else {
+            const observer = new MutationObserver(() => {
+              if (document.body || document.head) {
+                (document.body || document.head).appendChild(iframe);
+                observer.disconnect();
+              }
+            });
+            observer.observe(document.documentElement, { childList: true });
+          }
+        };
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', inject);
+        } else {
+          inject();
+        }
+      };
+
+      const sandboxUrl = browserAPI.runtime.getURL('sandbox.html');
+
+      await browserAPI.scripting.executeScript({
+        target: { tabId: tabId },
+        func: injectViaSandboxFunction,
+        args: [configId, jsFileName, decodedJS, sandboxUrl],
+        world: 'ISOLATED',
+        injectImmediately: injectImmediately
+      });
+    } else if (browserAPI.tabs && browserAPI.tabs.executeScript) {
+      await new Promise((resolve, reject) => {
+        browserAPI.tabs.executeScript(tabId, { code: decodedJS }, () => {
+          if (browserAPI.runtime.lastError) {
+            reject(new Error(browserAPI.runtime.lastError.message));
+          } else {
+            resolve();
+          }
+        });
+      });
+    } else {
+      throw new Error('Scripting API not available');
+    }
+  } catch (error) {
+    console.error(`Error injecting JS via scripting API:`, error);
+    throw error;
+  }
+}
+
+// Watch for tab updates to inject scripts/styles
+browserAPI.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url) {
+    try {
+      const config = await configManager.getConfigForUrl(tab.url);
+      if (config && config.enabled) {
+        browserAPI.tabs.sendMessage(tabId, {
+          type: 'INJECT',
+          config: config
+        }).catch(() => {
+          // Use browser.tabs.executeScript for Firefox, chrome.scripting for Chrome
+          if (browserAPI.scripting) {
+            browserAPI.scripting.executeScript({
+              target: { tabId: tabId },
+              files: ['content.js']
+            }).then(() => {
+              browserAPI.tabs.sendMessage(tabId, {
+                type: 'INJECT',
+                config: config
+              });
+            });
+          } else if (browserAPI.tabs.executeScript) {
+            browserAPI.tabs.executeScript(tabId, {
+              file: 'content.js'
+            }, () => {
+              browserAPI.tabs.sendMessage(tabId, {
+                type: 'INJECT',
+                config: config
+              });
+            });
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error injecting scripts:', error);
+    }
+  }
+});
+

@@ -1,0 +1,17 @@
+/* Example CSS file for UserWeb extension */
+/* This CSS will be injected into matching websites */
+
+body {
+  background-color: black !important;
+}
+
+/* Example: Highlight all links */
+a {
+  border-bottom: 2px solid red;
+}
+
+/* Example: Customize headings */
+h1, h2, h3 {
+  color: #2c3e50;
+  font-family: 'Arial', sans-serif;
+}

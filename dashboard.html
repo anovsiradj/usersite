@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UserWeb Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>UserWeb</h1>
+      <p class="subtitle">Minimalist script & style injector</p>
+    </header>
+
+    <div class="actions">
+      <button id="addConfigBtn" class="btn btn-primary">
+        <span class="icon">+</span>
+        Add Configuration
+      </button>
+      <button id="reloadBtn" class="btn btn-secondary">
+        <span class="icon">↻</span>
+        Reload Configs
+      </button>
+    </div>
+
+    <div id="configList" class="config-list">
+      <div class="loading">Loading configurations...</div>
+    </div>
+
+    <div id="addConfigModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Add Configuration</h2>
+          <button class="modal-close" id="closeModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="configFolder">Select Folder with config.json:</label>
+            <input type="file" id="configFolder" webkitdirectory directory multiple>
+            <small>Select a folder containing config.json and your JS/CSS files</small>
+          </div>
+          <div id="configPreview" class="config-preview">
+            <h3>Config Preview:</h3>
+            <pre id="configPreviewContent"></pre>
+          </div>
+          <div class="form-actions">
+            <button id="cancelBtn" class="btn btn-secondary">Cancel</button>
+            <button id="saveConfigBtn" class="btn btn-primary" disabled>Save Configuration</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
