@@ -40,6 +40,10 @@
             <input type="file" id="configFolder" webkitdirectory directory multiple>
             <small>Select a folder containing config.json and your JS/CSS files</small>
           </div>
+          <div class="form-group">
+            <button id="pickDirBtn" class="btn btn-secondary">Pick Folder (File System API)</button>
+            <small>Use the File System API for persistent folder access and rescan</small>
+          </div>
           <div id="configPreview" class="config-preview">
             <h3>Config Preview:</h3>
             <pre id="configPreviewContent"></pre>

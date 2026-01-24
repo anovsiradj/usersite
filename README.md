@@ -1,10 +1,10 @@
 # UserWeb
 
-A minimalist browser extension that injects custom JavaScript and CSS files into websites, similar to user script and user style extensions, but supporting both in one unified tool.
+A minimalist browser extension that injects custom JS and CSS files into websites, similar to user script and user style extensions, but supporting both in one unified tool.
 
 ## Features
 
-- **Dual Support**: Inject both JavaScript and CSS files into websites
+- **Dual Support**: Inject both JS and CSS files into websites
 - **Flexible Configuration**: Control where and when files are injected via `config.json`
 - **Dashboard Management**: Easy-to-use dashboard to add, remove, enable, and disable configurations
 - **Firefox Compatible**: Built using WebExtensions API for cross-browser compatibility
@@ -34,33 +34,11 @@ A minimalist browser extension that injects custom JavaScript and CSS files into
 
 1. Create a folder for your configuration
 2. Inside the folder, create a `config.json` file
-3. Add your JavaScript (`.js`) and/or CSS (`.css`) files to the same folder
+3. Add your JS (`.js`) and/or CSS (`.css`) files to the same folder
 
 ### Config.json Format
 
-```json
-{
-  "name": "My Customization",
-  "description": "Optional description",
-  "matches": [
-    "*://example.com/*",
-    "*://*.example.com/*"
-  ],
-  "css": [
-    {
-      "path": "style.css",
-      "inject": "head"
-    }
-  ],
-  "js": [
-    {
-      "path": "script.js",
-      "runAt": "document_end"
-    }
-  ],
-  "enabled": true
-}
-```
+See the examples folder for sample configurations and config.json structure.
 
 #### Configuration Fields
 
@@ -74,7 +52,7 @@ A minimalist browser extension that injects custom JavaScript and CSS files into
   - Can be a string (file name) or an object with:
     - `path`: File name
     - `inject`: Where to inject (`head`, `body-start`, `body-end`)
-- **js** (optional): Array of JavaScript files to inject
+- **js** (optional): Array of JS files to inject
   - Can be a string (file name) or an object with:
     - `path`: File name
     - `runAt`: When to run (`document_start`, `document_end`, `document_idle`)
@@ -107,7 +85,7 @@ A minimalist browser extension that injects custom JavaScript and CSS files into
 
 ## Example
 
-See the `examples/example-config` folder for a complete example configuration.
+See the `examples` folder for complete example configurations.
 
 ## Development
 

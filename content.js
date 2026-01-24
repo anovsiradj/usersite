@@ -132,6 +132,35 @@
     }
   }
 
+  async function injectJQuery(configId, version, runAt = 'document_start', tabId) {
+    const cacheKey = `jquery-${version}`;
+    if (injectedResources.has(cacheKey)) {
+      return;
+    }
+    try {
+      const response = await new Promise((resolve, reject) => {
+        browserAPI.runtime.sendMessage({
+          type: 'INJECT_JQUERY',
+          configId: configId,
+          version: version,
+          runAt: runAt,
+          tabId: tabId
+        }, (response) => {
+          if (browserAPI.runtime.lastError) {
+            reject(new Error(browserAPI.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        });
+      });
+      if (response && response.success) {
+        injectedResources.set(cacheKey, true);
+      }
+    } catch (error) {
+      console.error(`Error injecting jQuery ${version}:`, error);
+    }
+  }
+
   /**
    * Inject all resources from config
    */
@@ -163,6 +192,11 @@
         
         await injectCSS(config.id, cssFileName, injectionPoint);
       }
+    }
+
+    // jQuery (optional): version string
+    if (tabId && typeof config.jquery === 'string') {
+      await injectJQuery(config.id, config.jquery, 'document_start', tabId);
     }
 
     // Inject JS files (via background script to bypass CSP)

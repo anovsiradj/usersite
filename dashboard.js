@@ -82,6 +82,7 @@ const reloadBtn = document.getElementById('reloadBtn');
 const addConfigModal = document.getElementById('addConfigModal');
 const closeModal = document.getElementById('closeModal');
 const cancelBtn = document.getElementById('cancelBtn');
+const pickDirBtn = document.getElementById('pickDirBtn');
 const configFolderInput = document.getElementById('configFolder');
 const configPreview = document.getElementById('configPreview');
 const configPreviewContent = document.getElementById('configPreviewContent');
@@ -94,6 +95,31 @@ addConfigBtn.addEventListener('click', () => {
 
 closeModal.addEventListener('click', closeModalHandler);
 cancelBtn.addEventListener('click', closeModalHandler);
+
+pickDirBtn.addEventListener('click', async () => {
+  if (!window.showDirectoryPicker) {
+    alert('File System Access API not supported in this browser');
+    return;
+  }
+  try {
+    const dirHandle = await window.showDirectoryPicker();
+    const loaded = await loadFromDirectoryHandle(dirHandle);
+    if (loaded) {
+      currentConfigData = loaded.config;
+      currentConfigData._fsHandle = dirHandle;
+      currentConfigData._fsFiles = loaded.files;
+      displayConfigPreview(currentConfigData);
+      saveConfigBtn.disabled = false;
+    } else {
+      alert('No valid config.json found in selected folder');
+      saveConfigBtn.disabled = true;
+    }
+  } catch (error) {
+    console.error('Error picking directory:', error);
+    alert('Error picking directory: ' + error.message);
+    saveConfigBtn.disabled = true;
+  }
+});
 
 configFolderInput.addEventListener('change', async (e) => {
   const files = Array.from(e.target.files);
@@ -121,7 +147,7 @@ configFolderInput.addEventListener('change', async (e) => {
 });
 
 saveConfigBtn.addEventListener('click', async () => {
-  if (!currentConfigData || !currentConfigFiles) return;
+  if (!currentConfigData) return;
 
   try {
     // Generate unique config ID
@@ -129,10 +155,19 @@ saveConfigBtn.addEventListener('click', async () => {
     
     // Store files in extension storage (as data URLs)
     const fileStorage = {};
-    for (const fileInfo of currentConfigData._files || []) {
-      if (fileInfo.file.name !== 'config.json') {
-        const dataURL = await fileWatcher.readFileAsDataURL(fileInfo.file);
-        fileStorage[fileInfo.name] = dataURL;
+    if (currentConfigData._fsFiles && currentConfigData._fsFiles.length) {
+      for (const f of currentConfigData._fsFiles) {
+        if (f.name !== 'config.json') {
+          const dataURL = await readFileHandleAsDataURL(f.handle);
+          fileStorage[f.name] = dataURL;
+        }
+      }
+    } else {
+      for (const fileInfo of currentConfigData._files || []) {
+        if (fileInfo.file.name !== 'config.json') {
+          const dataURL = await fileWatcher.readFileAsDataURL(fileInfo.file);
+          fileStorage[fileInfo.name] = dataURL;
+        }
       }
     }
 
@@ -147,6 +182,9 @@ saveConfigBtn.addEventListener('click', async () => {
     // Prepare config without _files
     const configToSave = { ...currentConfigData };
     delete configToSave._files;
+    delete configToSave._fsFiles;
+    delete configToSave._fsHandle;
+    configToSave.source = currentConfigData._fsFiles ? 'fs' : 'storage';
 
     // Save config using promise-based message sending
     const saveResponse = await new Promise((resolve, reject) => {
@@ -164,6 +202,10 @@ saveConfigBtn.addEventListener('click', async () => {
         }
       });
     });
+
+    if (currentConfigData._fsHandle) {
+      await saveHandle(configId, currentConfigData._fsHandle);
+    }
 
     // Reload configs list
     await loadConfigs();
@@ -211,6 +253,7 @@ function displayConfigPreview(config) {
     matches: config.matches,
     js: config.js || [],
     css: config.css || [],
+    jquery: config.jquery,
     enabled: config.enabled !== undefined ? config.enabled : true
   };
   
@@ -277,6 +320,13 @@ function displayConfigs(configs) {
         }
       });
     }
+    const rescanId = `rescan-${config.id}`;
+    const rescanBtn = document.getElementById(rescanId);
+    if (rescanBtn) {
+      rescanBtn.addEventListener('click', () => {
+        rescanConfig(config.id);
+      });
+    }
   });
 }
 
@@ -307,6 +357,7 @@ function createConfigCard(config) {
             <input type="checkbox" id="toggle-${config.id}" ${config.enabled ? 'checked' : ''}>
             <span class="toggle-slider"></span>
           </label>
+          <button class="btn btn-secondary btn-small" id="rescan-${config.id}">Rescan</button>
           <button class="btn btn-danger btn-small" id="delete-${config.id}">Delete</button>
         </div>
       </div>
@@ -384,6 +435,7 @@ async function deleteConfig(configId) {
     
     // Delete stored files
     await browserAPI.storage.local.remove(`userweb_files_${configId}`);
+    await deleteHandle(configId);
     
     // Reload list
     await loadConfigs();
@@ -401,4 +453,130 @@ function escapeHtml(text) {
 
 // Load configs on page load
 loadConfigs();
+
+async function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('userweb_fs', 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('handles')) {
+        db.createObjectStore('handles');
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveHandle(configId, handle) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(handle, configId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getHandle(configId) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readonly');
+    const req = tx.objectStore('handles').get(configId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function deleteHandle(configId) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').delete(configId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function readFileHandleAsDataURL(fileHandle) {
+  const file = await fileHandle.getFile();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.onerror = (e) => reject(e);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function readFileHandleAsText(fileHandle) {
+  const file = await fileHandle.getFile();
+  return file.text();
+}
+
+async function loadFromDirectoryHandle(dirHandle) {
+  const files = [];
+  let config = null;
+  try {
+    for await (const [name, handle] of dirHandle.entries()) {
+      if (handle.kind === 'file') {
+        files.push({ name, handle });
+        if (name === 'config.json') {
+          const txt = await readFileHandleAsText(handle);
+          config = JSON.parse(txt);
+        }
+      }
+    }
+    if (!config) return null;
+    return { config, files };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function rescanConfig(configId) {
+  const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+  try {
+    const dirHandle = await getHandle(configId);
+    if (!dirHandle) {
+      alert('No folder access saved for this configuration. Re-add using directory picker.');
+      return;
+    }
+    const loaded = await loadFromDirectoryHandle(dirHandle);
+    if (!loaded) {
+      alert('Failed to read folder. Please re-authorize access.');
+      return;
+    }
+    const fileStorage = {};
+    for (const f of loaded.files) {
+      if (f.name !== 'config.json') {
+        const dataURL = await readFileHandleAsDataURL(f.handle);
+        fileStorage[f.name] = dataURL;
+      }
+    }
+    await browserAPI.storage.local.set({
+      [`userweb_files_${configId}`]: fileStorage
+    });
+    const configToSave = { ...loaded.config, id: configId, source: 'fs' };
+    await new Promise((resolve, reject) => {
+      browserAPI.runtime.sendMessage({
+        type: 'ADD_CONFIG',
+        configId: configId,
+        config: configToSave
+      }, (response) => {
+        if (browserAPI.runtime.lastError) {
+          reject(new Error(browserAPI.runtime.lastError.message));
+        } else if (response && response.success) {
+          resolve(response);
+        } else {
+          reject(new Error('Failed to update configuration'));
+        }
+      });
+    });
+    await loadConfigs();
+    alert('Configuration rescan completed');
+  } catch (error) {
+    console.error('Error rescanning config:', error);
+    alert('Error rescanning configuration: ' + error.message);
+  }
+}
 

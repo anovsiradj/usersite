@@ -112,8 +112,10 @@ class ConfigManager {
     if (!config || typeof config !== 'object') return false;
     if (!config.name || typeof config.name !== 'string') return false;
     if (!config.matches || !Array.isArray(config.matches) || config.matches.length === 0) return false;
-    if ((!config.js || !Array.isArray(config.js) || config.js.length === 0) &&
-        (!config.css || !Array.isArray(config.css) || config.css.length === 0)) {
+    const hasJS = Array.isArray(config.js) && config.js.length > 0;
+    const hasCSS = Array.isArray(config.css) && config.css.length > 0;
+    const hasJQ = typeof config.jquery === 'string' && config.jquery.length > 0;
+    if (!hasJS && !hasCSS && !hasJQ) {
       return false;
     }
     return true;
@@ -213,6 +215,15 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'INJECT_JS') {
     injectJSFile(message.configId, message.jsFileName, message.runAt || 'document_idle', message.tabId || sender.tab?.id).then(() => {
+      sendResponse({ success: true });
+    }).catch((error) => {
+      sendResponse({ success: false, error: error.message });
+    });
+    return true;
+  }
+
+  if (message.type === 'INJECT_JQUERY') {
+    injectJQuery(message.configId, message.version, message.runAt || 'document_start', message.tabId || sender.tab?.id).then(() => {
       sendResponse({ success: true });
     }).catch((error) => {
       sendResponse({ success: false, error: error.message });
@@ -396,6 +407,104 @@ async function injectJSFile(configId, jsFileName, runAt, tabId) {
   }
 }
 
+async function getJQueryCode(version) {
+  const ver = String(version);
+  const cacheKey = `userweb_jquery_${ver}`;
+  const cached = await browserAPI.storage.local.get(cacheKey);
+  if (cached && cached[cacheKey]) {
+    return cached[cacheKey];
+  }
+  const url = `https://code.jquery.com/jquery-${ver}.min.js`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch jQuery ${ver}: ${res.status}`);
+  }
+  const text = await res.text();
+  await browserAPI.storage.local.set({ [cacheKey]: text });
+  return text;
+}
+
+async function injectJQuery(configId, version, runAt, tabId) {
+  if (!tabId) {
+    throw new Error('Tab ID is required for jQuery injection');
+  }
+  const normalizedRunAt = normalizeRunAt(runAt);
+  let injectImmediately = false;
+  if (normalizedRunAt === 'document_start') {
+    injectImmediately = true;
+  }
+  const code = await getJQueryCode(version);
+  try {
+    if (typeof chrome !== 'undefined' && chrome.userScripts && chrome.userScripts.register) {
+      const config = configManager.getConfig(configId);
+      if (!config || !config.matches || !config.matches.length) {
+        throw new Error('Config not found for userScripts');
+      }
+      const scriptKey = `jquery:${configId}:${version}`;
+      if (userScriptsRegistry.has(scriptKey)) {
+        return;
+      }
+      const scriptId = `userweb_jquery_${configId}_${version}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      await new Promise((resolve, reject) => {
+        chrome.userScripts.register([{
+          id: scriptId,
+          matches: config.matches,
+          js: [{ code }],
+          runAt: normalizedRunAt
+        }], () => {
+          const err = chrome.runtime.lastError;
+          if (err) {
+            if (err.message && err.message.includes('Duplicate script ID')) {
+              userScriptsRegistry.set(scriptKey, scriptId);
+              resolve();
+            } else {
+              reject(new Error(err.message));
+            }
+          } else {
+            userScriptsRegistry.set(scriptKey, scriptId);
+            resolve();
+          }
+        });
+      });
+      return;
+    }
+
+    if (browserAPI.scripting) {
+      const injectCodeFunction = function(codeString) {
+        try {
+          const scriptEl = document.createElement('script');
+          scriptEl.textContent = codeString;
+          (document.head || document.documentElement).appendChild(scriptEl);
+          scriptEl.remove();
+        } catch (e) {
+          console.error('Error injecting jQuery:', e);
+        }
+      };
+      await browserAPI.scripting.executeScript({
+        target: { tabId: tabId },
+        func: injectCodeFunction,
+        args: [code],
+        world: 'ISOLATED',
+        injectImmediately: injectImmediately
+      });
+    } else if (browserAPI.tabs && browserAPI.tabs.executeScript) {
+      await new Promise((resolve, reject) => {
+        browserAPI.tabs.executeScript(tabId, { code }, () => {
+          if (browserAPI.runtime.lastError) {
+            reject(new Error(browserAPI.runtime.lastError.message));
+          } else {
+            resolve();
+          }
+        });
+      });
+    } else {
+      throw new Error('Scripting API not available');
+    }
+  } catch (error) {
+    console.error('Error injecting jQuery:', error);
+    throw error;
+  }
+}
 // Watch for tab updates to inject scripts/styles
 browserAPI.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
