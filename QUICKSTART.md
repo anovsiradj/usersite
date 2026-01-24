@@ -37,6 +37,7 @@
 {
   "name": "My Custom Script",
   "matches": ["*://example.com/*"],
+  "jquery": "3.7.1",
   "css": [
     {
       "path": "style.css",

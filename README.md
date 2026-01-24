@@ -1,10 +1,11 @@
 # UserWeb
 
-A minimalist browser extension that injects custom JS and CSS files into websites, similar to user script and user style extensions, but supporting both in one unified tool.
+A minimalist browser extension that injects custom JS and CSS files into websites, with optional jQuery injection, similar to user script and user style extensions, but supporting all in one unified tool.
 
 ## Features
 
 - **Dual Support**: Inject both JS and CSS files into websites
+- **jQuery Support**: Optionally inject a specific jQuery version per configuration
 - **Flexible Configuration**: Control where and when files are injected via `config.json`
 - **Dashboard Management**: Easy-to-use dashboard to add, remove, enable, and disable configurations
 - **Firefox Compatible**: Built using WebExtensions API for cross-browser compatibility
@@ -56,6 +57,7 @@ See the examples folder for sample configurations and config.json structure.
   - Can be a string (file name) or an object with:
     - `path`: File name
     - `runAt`: When to run (`document_start`, `document_end`, `document_idle`)
+- **jquery** (optional): String version (e.g., `"3.7.1"`) to inject jQuery
 - **enabled** (optional): Whether this configuration is enabled (default: `true`)
 
 #### Injection Points
@@ -94,7 +96,7 @@ See the `examples` folder for complete example configurations.
 ```
 userweb/
 ├── manifest.json           # Extension manifest
-├── background-simple.js    # Background script (service worker)
+├── background.js           # Background script (service worker)
 ├── content.js              # Content script for injection
 ├── dashboard.html          # Dashboard UI
 ├── dashboard.css           # Dashboard styles
