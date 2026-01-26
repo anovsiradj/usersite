@@ -125,6 +125,92 @@ class ConfigManager {
 const configManager = new ConfigManager();
 const userScriptsRegistry = new Map();
 
+async function unregisterScriptsForConfig(configId) {
+  if (typeof chrome === 'undefined' || !chrome.userScripts || !chrome.userScripts.unregister) {
+    return;
+  }
+  const config = configManager.getConfig(configId);
+  const ids = [];
+  const keys = Array.from(userScriptsRegistry.keys());
+  for (const key of keys) {
+    if (key.startsWith(`${configId}:`) || key.startsWith(`jquery:${configId}:`)) {
+      const id = userScriptsRegistry.get(key);
+      if (id) ids.push(id);
+      userScriptsRegistry.delete(key);
+    }
+  }
+  if (config) {
+    const baseIdSanitize = (s) => String(s).replace(/[^a-zA-Z0-9_]/g, '_');
+    if (Array.isArray(config.js)) {
+      for (const item of config.js) {
+        const name = typeof item === 'string' ? item : item.path;
+        const scriptId = `userweb_${configId}_${name}`.replace(/[^a-zA-Z0-9_]/g, '_');
+        ids.push(scriptId);
+      }
+    }
+    if (typeof config.jquery === 'string' && config.jquery.length) {
+      const jqId = `userweb_jquery_${configId}_${config.jquery}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      ids.push(jqId);
+    }
+  }
+  if (ids.length) {
+    await new Promise((resolve) => {
+      chrome.userScripts.unregister({ ids }, () => {
+        resolve();
+      });
+    });
+  }
+}
+
+async function sendInjectToTab(tabId, config) {
+  try {
+    await new Promise((resolve, reject) => {
+      browserAPI.tabs.sendMessage(tabId, { type: 'INJECT', config }, (response) => {
+        if (browserAPI.runtime.lastError) {
+          reject(new Error(browserAPI.runtime.lastError.message));
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  } catch (_) {
+    if (browserAPI.scripting) {
+      await browserAPI.scripting.executeScript({
+        target: { tabId: tabId },
+        files: ['content.js']
+      });
+      await new Promise((resolve) => {
+        browserAPI.tabs.sendMessage(tabId, { type: 'INJECT', config }, () => resolve());
+      });
+    } else if (browserAPI.tabs && browserAPI.tabs.executeScript) {
+      await new Promise((resolve) => {
+        browserAPI.tabs.executeScript(tabId, { file: 'content.js' }, () => resolve());
+      });
+      await new Promise((resolve) => {
+        browserAPI.tabs.sendMessage(tabId, { type: 'INJECT', config }, () => resolve());
+      });
+    }
+  }
+}
+
+async function injectConfigIntoMatchingTabs(configId) {
+  const config = configManager.getConfig(configId);
+  if (!config || !config.enabled) return;
+  const tabs = await new Promise((resolve) => {
+    browserAPI.tabs.query({}, (t) => resolve(t || []));
+  });
+  for (const tab of tabs) {
+    if (tab && tab.id && tab.url) {
+      try {
+        const urlObj = new URL(tab.url);
+        if (configManager.matchesUrl(config, urlObj)) {
+          await sendInjectToTab(tab.id, config);
+        }
+      } catch (_) {}
+    }
+  }
+}
+
 // Load configs on startup
 configManager.loadAllConfigs().catch(err => {
   console.error('Error loading configs on startup:', err);
@@ -157,35 +243,47 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'TOGGLE_CONFIG') {
-    configManager.toggleConfig(message.configId, message.enabled)
-      .then(() => {
+    (async () => {
+      try {
+        await configManager.toggleConfig(message.configId, message.enabled);
+        if (message.enabled === false) {
+          await unregisterScriptsForConfig(message.configId);
+        } else {
+          await injectConfigIntoMatchingTabs(message.configId);
+        }
         sendResponse({ success: true });
-      })
-      .catch(error => {
+      } catch (error) {
         console.error('Error toggling config:', error);
         sendResponse({ success: false, error: error.message });
-      });
+      }
+    })();
     return true;
   }
 
   if (message.type === 'DELETE_CONFIG') {
-    configManager.deleteConfig(message.configId)
-      .then(() => {
+    (async () => {
+      try {
+        await unregisterScriptsForConfig(message.configId);
+        await configManager.deleteConfig(message.configId);
         sendResponse({ success: true });
-      })
-      .catch(error => {
+      } catch (error) {
         console.error('Error deleting config:', error);
         sendResponse({ success: false, error: error.message });
-      });
+      }
+    })();
     return true;
   }
 
   if (message.type === 'ADD_CONFIG') {
-    configManager.addConfig(message.configId, message.config).then(() => {
-      sendResponse({ success: true });
-    }).catch((error) => {
-      sendResponse({ success: false, error: error.message });
-    });
+    (async () => {
+      try {
+        await configManager.addConfig(message.configId, message.config);
+        await injectConfigIntoMatchingTabs(message.configId);
+        sendResponse({ success: true });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
     return true;
   }
 
@@ -291,10 +389,13 @@ async function injectJSFile(configId, jsFileName, runAt, tabId) {
         throw new Error('Config not found for userScripts');
       }
       const scriptKey = `${configId}:${jsFileName}`;
-      if (userScriptsRegistry.has(scriptKey)) {
-        return;
-      }
-      const scriptId = `userweb_${configId}_${jsFileName}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      let scriptId = `userweb_${configId}_${jsFileName}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      // Proactively unregister deterministic ID to avoid duplicates (handles service worker restarts)
+      await new Promise((resolve) => {
+        chrome.userScripts.unregister({ ids: [scriptId] }, () => {
+          resolve();
+        });
+      });
       await new Promise((resolve, reject) => {
         chrome.userScripts.register([{
           id: scriptId,
@@ -304,12 +405,7 @@ async function injectJSFile(configId, jsFileName, runAt, tabId) {
         }], () => {
           const err = chrome.runtime.lastError;
           if (err) {
-            if (err.message && err.message.includes('Duplicate script ID')) {
-              userScriptsRegistry.set(scriptKey, scriptId);
-              resolve();
-            } else {
-              reject(new Error(err.message));
-            }
+            reject(new Error(err.message));
           } else {
             userScriptsRegistry.set(scriptKey, scriptId);
             resolve();
@@ -441,10 +537,12 @@ async function injectJQuery(configId, version, runAt, tabId) {
         throw new Error('Config not found for userScripts');
       }
       const scriptKey = `jquery:${configId}:${version}`;
-      if (userScriptsRegistry.has(scriptKey)) {
-        return;
-      }
-      const scriptId = `userweb_jquery_${configId}_${version}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      let scriptId = `userweb_jquery_${configId}_${version}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      await new Promise((resolve) => {
+        chrome.userScripts.unregister({ ids: [scriptId] }, () => {
+          resolve();
+        });
+      });
       await new Promise((resolve, reject) => {
         chrome.userScripts.register([{
           id: scriptId,
@@ -454,12 +552,7 @@ async function injectJQuery(configId, version, runAt, tabId) {
         }], () => {
           const err = chrome.runtime.lastError;
           if (err) {
-            if (err.message && err.message.includes('Duplicate script ID')) {
-              userScriptsRegistry.set(scriptKey, scriptId);
-              resolve();
-            } else {
-              reject(new Error(err.message));
-            }
+            reject(new Error(err.message));
           } else {
             userScriptsRegistry.set(scriptKey, scriptId);
             resolve();
@@ -511,32 +604,7 @@ browserAPI.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     try {
       const config = await configManager.getConfigForUrl(tab.url);
       if (config && config.enabled) {
-        browserAPI.tabs.sendMessage(tabId, {
-          type: 'INJECT',
-          config: config
-        }).catch(() => {
-          // Use browser.tabs.executeScript for Firefox, chrome.scripting for Chrome
-          if (browserAPI.scripting) {
-            browserAPI.scripting.executeScript({
-              target: { tabId: tabId },
-              files: ['content.js']
-            }).then(() => {
-              browserAPI.tabs.sendMessage(tabId, {
-                type: 'INJECT',
-                config: config
-              });
-            });
-          } else if (browserAPI.tabs.executeScript) {
-            browserAPI.tabs.executeScript(tabId, {
-              file: 'content.js'
-            }, () => {
-              browserAPI.tabs.sendMessage(tabId, {
-                type: 'INJECT',
-                config: config
-              });
-            });
-          }
-        });
+        await sendInjectToTab(tabId, config);
       }
     } catch (error) {
       console.error('Error injecting scripts:', error);

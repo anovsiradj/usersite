@@ -20,7 +20,7 @@
     z-index: 10000;
     font-family: Arial, sans-serif;
   `;
-  banner.textContent = 'UserWeb: Custom script is active!';
+  banner.textContent = 'UserSite(5): Custom script is active!';
   document.body.insertBefore(banner, document.body.firstChild);
   
   // Example: Log all links

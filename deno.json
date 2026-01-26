@@ -1,0 +1,10 @@
+{
+	"imports": {
+		"jquery": "npm:jquery@4",
+		"bootstrap": "npm:bootstrap@5"
+	},
+	"tasks": {
+		"vendor.js": "deno bundle --platform browser --output web/vendor.js js/vendor.ts",
+		"vendor.css": "deno bundle --platform browser --output web/vendor.css css/vendor.css"
+	}
+}

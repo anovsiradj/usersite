@@ -219,6 +219,30 @@ header h1 {
   color: #7f8c8d;
 }
 
+.banner {
+  background: #fff3cd;
+  border: 1px solid #ffeeba;
+  color: #856404;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  justify-content: space-between;
+}
+
+.banner-text {
+  font-size: 13px;
+}
+
 /* Toggle Switch */
 .toggle-switch {
   position: relative;

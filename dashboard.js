@@ -87,6 +87,8 @@ const configFolderInput = document.getElementById('configFolder');
 const configPreview = document.getElementById('configPreview');
 const configPreviewContent = document.getElementById('configPreviewContent');
 const saveConfigBtn = document.getElementById('saveConfigBtn');
+const fsBanner = document.getElementById('fsBanner');
+const fsGrantBtn = document.getElementById('fsGrantBtn');
 
 // Event Listeners
 addConfigBtn.addEventListener('click', () => {
@@ -120,6 +122,13 @@ pickDirBtn.addEventListener('click', async () => {
     saveConfigBtn.disabled = true;
   }
 });
+
+if (fsGrantBtn) {
+  fsGrantBtn.addEventListener('click', async () => {
+    await requestFsPermissionsViaGesture();
+    await updateFsBanner();
+  });
+}
 
 configFolderInput.addEventListener('change', async (e) => {
   const files = Array.from(e.target.files);
@@ -453,6 +462,7 @@ function escapeHtml(text) {
 
 // Load configs on page load
 loadConfigs();
+updateFsBanner();
 
 async function openDb() {
   return new Promise((resolve, reject) => {
@@ -476,6 +486,103 @@ async function saveHandle(configId, handle) {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+async function listHandles() {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readonly');
+    const store = tx.objectStore('handles');
+    const req = store.openCursor();
+    const entries = [];
+    req.onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        entries.push({ configId: cursor.key, handle: cursor.value });
+        cursor.continue();
+      } else {
+        resolve(entries);
+      }
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function ensureHandlePermission(handle) {
+  try {
+    if (!handle || typeof handle.queryPermission !== 'function' || typeof handle.requestPermission !== 'function') return false;
+    const q = await handle.queryPermission({ mode: 'read' });
+    if (q === 'granted') return true;
+    const r = await handle.requestPermission({ mode: 'read' });
+    return r === 'granted';
+  } catch (_) {
+    return false;
+  }
+}
+
+async function requestFsPermissionsViaGesture() {
+  try {
+    const entries = await listHandles();
+    if (entries.length) {
+      for (const entry of entries) {
+        await ensureHandlePermission(entry.handle);
+      }
+      return;
+    }
+    if ('showDirectoryPicker' in window) {
+      try {
+        await window.showDirectoryPicker();
+      } catch (_) {}
+    } else {
+      alert('File System Access API not supported in this browser');
+    }
+  } catch (_) {}
+}
+
+async function updateFsBanner() {
+  try {
+    const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+    const resp = await new Promise((resolve) => {
+      browserAPI.runtime.sendMessage({ type: 'GET_CONFIGS' }, (response) => {
+        if (browserAPI.runtime.lastError) {
+          resolve({ success: false, configs: [] });
+        } else {
+          resolve(response || { success: true, configs: [] });
+        }
+      });
+    });
+    const configs = (resp && resp.success && Array.isArray(resp.configs)) ? resp.configs : [];
+    const fsConfigs = configs.filter(c => c && c.source === 'fs');
+    let needs = false;
+    if (fsConfigs.length === 0) {
+      needs = false;
+    } else {
+      for (const cfg of fsConfigs) {
+        try {
+          const handle = await getHandle(cfg.id);
+          if (!handle) {
+            needs = true;
+            break;
+          }
+          const q = await handle.queryPermission({ mode: 'read' });
+          if (q !== 'granted') {
+            needs = true;
+            break;
+          }
+        } catch (_) {
+          needs = true;
+          break;
+        }
+      }
+    }
+    if (fsBanner) {
+      fsBanner.hidden = !needs;
+    }
+  } catch (_) {
+    if (fsBanner) {
+      fsBanner.hidden = true;
+    }
+  }
 }
 
 async function getHandle(configId) {
