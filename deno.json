@@ -3,8 +3,11 @@
 		"jquery": "npm:jquery@4",
 		"bootstrap": "npm:bootstrap@5"
 	},
+	"compilerOptions": {
+		"types": ["npm:@types/jquery", "npm:@types/bootstrap"]
+	},
 	"tasks": {
-		"vendor.js": "deno bundle --platform browser --output web/vendor.js js/vendor.ts",
+		"vendor.js": "deno bundle --platform browser --output web/vendor.js js/vendor.js",
 		"vendor.css": "deno bundle --platform browser --output web/vendor.css css/vendor.css"
 	}
 }

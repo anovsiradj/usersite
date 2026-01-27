@@ -39,28 +39,30 @@
       <div class="loading">Loading configurations...</div>
     </div>
 
-    <div id="addConfigModal" class="modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Add Configuration</h2>
-          <button class="modal-close" id="closeModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="configFolder">Select Folder with config.json:</label>
-            <input type="file" id="configFolder" webkitdirectory directory multiple>
-            <small>Select a folder containing config.json and your JS/CSS files</small>
+    <div id="addConfigModal" class="modal fade" tabindex="-1" aria-labelledby="addConfigModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="addConfigModalLabel">Add Configuration</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="form-group">
-            <button id="pickDirBtn" class="btn btn-secondary">Pick Folder (File System API)</button>
-            <small>Use the File System API for persistent folder access and rescan</small>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label for="configFolder" class="form-label">Select Folder with config.json:</label>
+              <input type="file" id="configFolder" class="form-control" webkitdirectory directory multiple>
+              <div class="form-text">Select a folder containing config.json and your JS/CSS files</div>
+            </div>
+            <div class="mb-3">
+              <button id="pickDirBtn" class="btn btn-secondary">Pick Folder (File System API)</button>
+              <div class="form-text">Use the File System API for persistent folder access and rescan</div>
+            </div>
+            <div id="configPreview" class="config-preview mt-3" style="display:none;">
+              <h6>Config Preview:</h6>
+              <pre id="configPreviewContent" class="bg-light p-2 border rounded"></pre>
+            </div>
           </div>
-          <div id="configPreview" class="config-preview">
-            <h3>Config Preview:</h3>
-            <pre id="configPreviewContent"></pre>
-          </div>
-          <div class="form-actions">
-            <button id="cancelBtn" class="btn btn-secondary">Cancel</button>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
             <button id="saveConfigBtn" class="btn btn-primary" disabled>Save Configuration</button>
           </div>
         </div>

@@ -75,30 +75,32 @@ const fileWatcher = new FileWatcher();
 let currentConfigFiles = null;
 let currentConfigData = null;
 
-// DOM Elements
-const configList = document.getElementById('configList');
-const addConfigBtn = document.getElementById('addConfigBtn');
-const reloadBtn = document.getElementById('reloadBtn');
-const addConfigModal = document.getElementById('addConfigModal');
-const closeModal = document.getElementById('closeModal');
-const cancelBtn = document.getElementById('cancelBtn');
-const pickDirBtn = document.getElementById('pickDirBtn');
-const configFolderInput = document.getElementById('configFolder');
-const configPreview = document.getElementById('configPreview');
-const configPreviewContent = document.getElementById('configPreviewContent');
-const saveConfigBtn = document.getElementById('saveConfigBtn');
-const fsBanner = document.getElementById('fsBanner');
-const fsGrantBtn = document.getElementById('fsGrantBtn');
+// DOM Elements (jQuery)
+const $configList = $('#configList');
+const $addConfigBtn = $('#addConfigBtn');
+const $reloadBtn = $('#reloadBtn');
+const $pickDirBtn = $('#pickDirBtn');
+const $configFolderInput = $('#configFolder');
+const $configPreview = $('#configPreview');
+const $configPreviewContent = $('#configPreviewContent');
+const $saveConfigBtn = $('#saveConfigBtn');
+const $fsBanner = $('#fsBanner');
+const $fsGrantBtn = $('#fsGrantBtn');
 
-// Event Listeners
-addConfigBtn.addEventListener('click', () => {
-  addConfigModal.classList.add('show');
+// Event Listeners (jQuery)
+$addConfigBtn.on('click', () => {
+  new bootstrap.Modal(document.getElementById('addConfigModal')).show();
 });
 
-closeModal.addEventListener('click', closeModalHandler);
-cancelBtn.addEventListener('click', closeModalHandler);
+$('#addConfigModal').on('hidden.bs.modal', () => {
+  $configFolderInput.val('');
+  $configPreview.hide();
+  $saveConfigBtn.prop('disabled', true);
+  currentConfigFiles = null;
+  currentConfigData = null;
+});
 
-pickDirBtn.addEventListener('click', async () => {
+$pickDirBtn.on('click', async () => {
   if (!window.showDirectoryPicker) {
     alert('File System Access API not supported in this browser');
     return;
@@ -123,14 +125,14 @@ pickDirBtn.addEventListener('click', async () => {
   }
 });
 
-if (fsGrantBtn) {
-  fsGrantBtn.addEventListener('click', async () => {
+if ($fsGrantBtn.length) {
+  $fsGrantBtn.on('click', async () => {
     await requestFsPermissionsViaGesture();
     await updateFsBanner();
   });
 }
 
-configFolderInput.addEventListener('change', async (e) => {
+$configFolderInput.on('change', async (e) => {
   const files = Array.from(e.target.files);
   if (files.length === 0) return;
 
@@ -155,7 +157,7 @@ configFolderInput.addEventListener('change', async (e) => {
   }
 });
 
-saveConfigBtn.addEventListener('click', async () => {
+$saveConfigBtn.on('click', async () => {
   if (!currentConfigData) return;
 
   try {
@@ -219,16 +221,15 @@ saveConfigBtn.addEventListener('click', async () => {
     // Reload configs list
     await loadConfigs();
     
-    // Close modal and reset
-    closeModalHandler();
+    // Close modal
+    bootstrap.Modal.getInstance(document.getElementById('addConfigModal')).hide();
     alert('Configuration saved successfully!');
   } catch (error) {
     console.error('Error saving config:', error);
     alert('Error saving configuration: ' + error.message);
   }
 });
-
-reloadBtn.addEventListener('click', async () => {
+$reloadBtn.on('click', async () => {
   const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
   try {
     await new Promise((resolve, reject) => {
@@ -247,15 +248,6 @@ reloadBtn.addEventListener('click', async () => {
   }
 });
 
-function closeModalHandler() {
-  addConfigModal.classList.remove('show');
-  configFolderInput.value = '';
-  configPreview.style.display = 'none';
-  saveConfigBtn.disabled = true;
-  currentConfigFiles = null;
-  currentConfigData = null;
-}
-
 function displayConfigPreview(config) {
   const preview = {
     name: config.name,
@@ -266,8 +258,8 @@ function displayConfigPreview(config) {
     enabled: config.enabled !== undefined ? config.enabled : true
   };
   
-  configPreviewContent.textContent = JSON.stringify(preview, null, 2);
-  configPreview.style.display = 'block';
+  $configPreviewContent.text(JSON.stringify(preview, null, 2));
+  $configPreview.show();
 }
 
 function generateConfigId(name) {
@@ -277,7 +269,7 @@ function generateConfigId(name) {
 }
 
 async function loadConfigs() {
-  configList.innerHTML = '<div class="loading">Loading configurations...</div>';
+  $configList.html('<div class="loading">Loading configurations...</div>');
 
   try {
     const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
@@ -294,45 +286,45 @@ async function loadConfigs() {
     if (response && response.success && response.configs) {
       displayConfigs(response.configs);
     } else {
-      configList.innerHTML = '<div class="empty-state">No configurations found. Click "Add Configuration" to get started.</div>';
+      $configList.html('<div class="empty-state">No configurations found. Click \"Add Configuration\" to get started.</div>');
     }
   } catch (error) {
     console.error('Error loading configs:', error);
-    configList.innerHTML = '<div class="empty-state">Error loading configurations: ' + error.message + '</div>';
+    $configList.html('<div class="empty-state">Error loading configurations: ' + error.message + '</div>');
   }
 }
 
 function displayConfigs(configs) {
   if (configs.length === 0) {
-    configList.innerHTML = '<div class="empty-state">No configurations found. Click "Add Configuration" to get started.</div>';
+    $configList.html('<div class="empty-state">No configurations found. Click \"Add Configuration\" to get started.</div>');
     return;
   }
 
-  configList.innerHTML = configs.map(config => createConfigCard(config)).join('');
+  $configList.html(configs.map(config => createConfigCard(config)).join(''));
   
   // Attach event listeners
   configs.forEach(config => {
     const toggleId = `toggle-${config.id}`;
-    const toggle = document.getElementById(toggleId);
-    if (toggle) {
-      toggle.addEventListener('change', (e) => {
+    const $toggle = $(`#${toggleId}`);
+    if ($toggle.length) {
+      $toggle.on('change', (e) => {
         toggleConfig(config.id, e.target.checked);
       });
     }
 
     const deleteId = `delete-${config.id}`;
-    const deleteBtn = document.getElementById(deleteId);
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', () => {
+    const $deleteBtn = $(`#${deleteId}`);
+    if ($deleteBtn.length) {
+      $deleteBtn.on('click', () => {
         if (confirm(`Delete configuration "${config.name}"?`)) {
           deleteConfig(config.id);
         }
       });
     }
     const rescanId = `rescan-${config.id}`;
-    const rescanBtn = document.getElementById(rescanId);
-    if (rescanBtn) {
-      rescanBtn.addEventListener('click', () => {
+    const $rescanBtn = $(`#${rescanId}`);
+    if ($rescanBtn.length) {
+      $rescanBtn.on('click', () => {
         rescanConfig(config.id);
       });
     }
@@ -461,8 +453,10 @@ function escapeHtml(text) {
 }
 
 // Load configs on page load
-loadConfigs();
-updateFsBanner();
+$(function() {
+  loadConfigs();
+  updateFsBanner();
+});
 
 async function openDb() {
   return new Promise((resolve, reject) => {
@@ -575,12 +569,12 @@ async function updateFsBanner() {
         }
       }
     }
-    if (fsBanner) {
-      fsBanner.hidden = !needs;
+    if ($fsBanner.length) {
+      $fsBanner.prop('hidden', !needs);
     }
   } catch (_) {
-    if (fsBanner) {
-      fsBanner.hidden = true;
+    if ($fsBanner.length) {
+      $fsBanner.prop('hidden', true);
     }
   }
 }

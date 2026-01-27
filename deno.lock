@@ -20,6 +20,8 @@
   },
   "workspace": {
     "dependencies": [
+      "npm:@types/bootstrap@*",
+      "npm:@types/jquery@*",
       "npm:bootstrap@5",
       "npm:jquery@4"
     ]
