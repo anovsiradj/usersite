@@ -29,12 +29,8 @@
 .config-card {
   border-left-width: 4px !important;
   border-left-color: var(--bs-primary) !important;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.config-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--bs-box-shadow-sm);
+  transition: box-shadow 0.2s ease;
+  overflow: hidden;
 }
 
 .config-card.disabled {
@@ -42,12 +38,34 @@
   border-left-color: var(--bs-secondary) !important;
 }
 
-.config-card .card-title {
-  color: var(--bs-emphasis-color);
+.config-card-header {
+  transition: background-color 0.2s ease;
+  user-select: none;
 }
 
-.config-details {
-  font-size: 0.875rem;
+.config-card-header:hover {
+  background-color: var(--bs-tertiary-bg);
+}
+
+.toggle-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--bs-secondary);
+}
+
+.config-card-body {
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.select-none {
+  user-select: none;
 }
 
 /* Modal and feedback style adjustments */

@@ -1,83 +1,22 @@
-// Dashboard script for UserWeb extension
+// Dashboard script for UserSite extension
+import { FileWatcher } from './lib/file-watcher.js';
+import { escapeHtml, generateConfigId } from './lib/utils.js';
+import {
+  saveHandle,
+  getHandle,
+  listHandles,
+  deleteHandle,
+  readFileHandleAsDataURL,
+  readFileHandleAsText
+} from './lib/storage-helper.js';
 
 // Theme management
 (function () {
-  const savedTheme = localStorage.getItem('userweb-theme');
+  const savedTheme = localStorage.getItem('usersite-theme');
   const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   const theme = savedTheme || systemTheme;
   document.documentElement.setAttribute('data-bs-theme', theme);
 })();
-
-// FileWatcher implementation (inline for compatibility)
-class FileWatcher {
-  async readDirectory(files) {
-    const configs = {};
-    const fileMap = {};
-
-    for (const file of files) {
-      const path = file.webkitRelativePath || file.name;
-      const pathParts = path.split('/');
-
-      if (pathParts.length > 1) {
-        const dirName = pathParts[0];
-        const fileName = pathParts[pathParts.length - 1];
-
-        if (!fileMap[dirName]) {
-          fileMap[dirName] = { files: [], config: null };
-        }
-
-        fileMap[dirName].files.push({ file, fileName, path });
-      } else {
-        if (!fileMap['']) {
-          fileMap[''] = { files: [], config: null };
-        }
-        fileMap[''].files.push({ file, fileName: file.name, path });
-      }
-    }
-
-    for (const [dirName, dirData] of Object.entries(fileMap)) {
-      const configFile = dirData.files.find(f => f.fileName === 'config.json');
-
-      if (configFile) {
-        try {
-          const configText = await this.readFileAsText(configFile.file);
-          const config = JSON.parse(configText);
-          dirData.config = config;
-
-          config._files = dirData.files.map(f => ({
-            name: f.fileName,
-            path: f.path,
-            file: f.file
-          }));
-
-          configs[dirName || 'root'] = dirData.config;
-        } catch (error) {
-          console.error(`Error reading config.json in ${dirName}:`, error);
-        }
-      }
-    }
-
-    return configs;
-  }
-
-  readFileAsText(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = (e) => reject(e);
-      reader.readAsText(file);
-    });
-  }
-
-  readFileAsDataURL(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = (e) => reject(e);
-      reader.readAsDataURL(file);
-    });
-  }
-}
 
 const fileWatcher = new FileWatcher();
 let currentConfigFiles = null;
@@ -201,7 +140,7 @@ $saveConfigBtn.on('click', async () => {
 
     // Save files to storage
     await browserAPI.storage.local.set({
-      [`userweb_files_${configId}`]: fileStorage
+      [`usersite_files_${configId}`]: fileStorage
     });
 
     // Prepare config without _files
@@ -275,11 +214,6 @@ function displayConfigPreview(config) {
   $configPreview.show();
 }
 
-function generateConfigId(name) {
-  const timestamp = Date.now();
-  const sanitized = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-  return `${sanitized}-${timestamp}`;
-}
 
 async function loadConfigs() {
   $configList.html('<div class="loading">Loading configurations...</div>');
@@ -307,101 +241,188 @@ async function loadConfigs() {
   }
 }
 
+function populateTemplate($el, data) {
+  // Process both the element itself and its descendants
+  $el.find('[data-template-text]').add($el.filter('[data-template-text]')).each(function () {
+    const key = $(this).data('template-text');
+    if (data[key] !== undefined) {
+      $(this).text(data[key]);
+      if (!data[key] && $(this).hasClass('small')) $(this).hide(); // Hide empty description
+    }
+  });
+  $el.find('[data-template-html]').add($el.filter('[data-template-html]')).each(function () {
+    const key = $(this).data('template-html');
+    if (data[key] !== undefined) $(this).html(data[key]);
+  });
+}
+
 function displayConfigs(configs) {
   if (!configs || configs.length === 0) {
     $configList.html('<div class="empty-state">No configurations found. Click \"Add Configuration\" to get started.</div>');
     return;
   }
 
-  $configList.html(configs.map(config => createConfigCard(config)).join(''));
-
-  // Attach event listeners
+  $configList.empty();
   configs.forEach(config => {
-    const toggleId = `toggle-${config.id}`;
-    const $toggle = $(`#${toggleId}`);
-    if ($toggle.length) {
-      $toggle.on('change', (e) => {
-        toggleConfig(config.id, e.target.checked);
-      });
-    }
+    const $card = createConfigCard(config);
+    $configList.append($card);
 
-    const deleteId = `delete-${config.id}`;
-    const $deleteBtn = $(`#${deleteId}`);
-    if ($deleteBtn.length) {
-      $deleteBtn.on('click', () => {
-        if (confirm(`Delete configuration "${config.name}"?`)) {
-          deleteConfig(config.id);
-        }
-      });
-    }
-    const rescanId = `rescan-${config.id}`;
-    const $rescanBtn = $(`#${rescanId}`);
-    if ($rescanBtn.length) {
-      $rescanBtn.on('click', () => {
-        rescanConfig(config.id);
-      });
-    }
+    // Attach event listeners
+    $card.find(`.config-toggle`).on('change', (e) => {
+      e.stopPropagation();
+      toggleConfig(config.id, e.target.checked);
+    });
+
+    $card.find(`.rescan-btn`).on('click', (e) => {
+      e.stopPropagation();
+      rescanConfig(config.id);
+    });
+
+    $card.find(`.delete-btn`).on('click', (e) => {
+      e.stopPropagation();
+      if (confirm(`Delete configuration "${config.name}"?`)) {
+        deleteConfig(config.id);
+      }
+    });
+
+    $card.find('.header-actions').on('click', (e) => {
+      e.stopPropagation();
+    });
+
+    $card.find('.source-badge').on('click', function (e) {
+      e.stopPropagation();
+      const fileName = $(this).data('file');
+      viewSource(config.id, fileName);
+    });
+
+    // Custom toggle logic
+    $card.find('.config-card-header').on('click', function () {
+      const $body = $card.find('.config-card-body');
+      const $arrow = $card.find('.toggle-arrow');
+      const isVisible = $body.is(':visible');
+
+      if (isVisible) {
+        $body.slideUp(200);
+        $arrow.css('transform', 'rotate(0deg)');
+      } else {
+        $body.slideDown(200);
+        $arrow.css('transform', 'rotate(-180deg)');
+      }
+    });
   });
 }
 
 function createConfigCard(config) {
+  const $template = $($('#configCardTemplate').html());
+
+  // Clone and populate badges
+  const $matchTpl = $('#matchBadgeTemplate');
+  const $sourceTpl = $('#sourceBadgeTemplate');
+
+  const $matchesContainer = $('<div></div>');
+  const matches = Array.isArray(config.matches) ? config.matches : (config.matches ? [config.matches] : []);
+  matches.forEach(m => {
+    const $badge = $($matchTpl.html());
+    populateTemplate($badge, { match: m });
+    $matchesContainer.append($badge).append(' ');
+  });
+
   const files = [];
-  if (config.js) {
-    config.js.forEach(item => {
-      const name = typeof item === 'string' ? item : item.path;
-      files.push({ name, type: 'js' });
+  const processItems = (items, type) => {
+    if (!Array.isArray(items)) return;
+    items.forEach((item, index) => {
+      if (typeof item === 'string') {
+        files.push({ name: item, type, index });
+      } else if (item.file) {
+        files.push({ name: item.file, type, index });
+      } else if (item.code) {
+        files.push({ name: `Inline ${type === 'js' ? 'Script' : 'Style'}`, type, index, isInline: true, code: item.code });
+      }
     });
-  }
-  if (config.css) {
-    config.css.forEach(item => {
-      const name = typeof item === 'string' ? item : item.path;
-      files.push({ name, type: 'css' });
+  };
+
+  processItems(config.js, 'js');
+  processItems(config.css, 'css');
+
+  const $sourcesContainer = $('<div></div>');
+  files.forEach(f => {
+    const $badge = $($sourceTpl.html());
+    const fileName = f.isInline ? `inline-${f.type}-${f.index}` : f.name;
+    $badge.attr('data-file', fileName);
+    if (f.isInline) $badge.data('code', f.code);
+
+    populateTemplate($badge, {
+      icon: f.type === 'js' ? '📜' : '🎨',
+      name: f.name
     });
+    $sourcesContainer.append($badge).append(' ');
+  });
+
+  // Populate main card
+  populateTemplate($template, {
+    name: config.name,
+    description: config.description || '',
+    matches: $matchesContainer.html(),
+    sources: $sourcesContainer.html() || '<span class="text-secondary small">No sources defined</span>'
+  });
+
+  if (!config.enabled) $template.addClass('disabled');
+  $template.find('.config-toggle').prop('checked', !!config.enabled);
+
+  return $template;
+}
+
+async function viewSource(configId, fileName) {
+  const $modal = $('#sourceViewerModal');
+  const $content = $('#sourceContent');
+  const $title = $('#sourceViewerModalLabel');
+
+  $title.text(`Source: ${fileName}`);
+  $content.text('Loading...');
+
+  const modalObj = new bootstrap.Modal($modal[0]);
+  modalObj.show();
+
+  // Check if it's inline code passed via data
+  const $clickedBadge = $configList.find(`.source-badge[data-file="${fileName}"]`);
+  const inlineCode = $clickedBadge.data('code');
+  if (inlineCode) {
+    $content.text(inlineCode);
+    return;
   }
 
-  return `
-    <div class="card config-card ${config.enabled ? '' : 'disabled'} mb-3">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start mb-3">
-          <div>
-            <h5 class="card-title h6 mb-1 text-emphasis">${escapeHtml(config.name)}</h5>
-            ${config.description ? `<p class="card-text small text-secondary mb-0">${escapeHtml(config.description)}</p>` : ''}
-          </div>
-          <div class="d-flex align-items-center gap-2">
-            <div class="form-check form-switch me-2">
-              <input class="form-check-input" type="checkbox" role="switch" id="toggle-${config.id}" ${config.enabled ? 'checked' : ''}>
-            </div>
-            <button class="btn btn-outline-secondary btn-sm" id="rescan-${config.id}" title="Rescan folder">Rescan</button>
-            <button class="btn btn-outline-danger btn-sm" id="delete-${config.id}" title="Delete configuration">Delete</button>
-          </div>
-        </div>
-        
-        <div class="config-details border-top pt-3">
-          <div class="row mb-2">
-            <div class="col-sm-2 small fw-bold text-body-secondary">Matches:</div>
-            <div class="col-sm-10">
-              <div class="d-flex flex-wrap gap-1">
-                ${config.matches.map(m => `<span class="badge rounded-pill text-bg-light border">${escapeHtml(m)}</span>`).join('')}
-              </div>
-            </div>
-          </div>
-          <div class="row">
-            <div class="col-sm-2 small fw-bold text-body-secondary">Files:</div>
-            <div class="col-sm-10">
-              <div class="d-flex flex-wrap gap-1">
-                ${files.map(f => `
-                  <div class="badge text-bg-secondary p-1 px-2 d-flex align-items-center gap-1 fw-normal">
-                    <span>${f.type === 'js' ? '📜' : '🎨'}</span>
-                    <span>${escapeHtml(f.name)}</span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+  try {
+    const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+
+    // First try to see if it's an FS handle based config
+    const handle = await getHandle(configId);
+    if (handle) {
+      try {
+        const fileHandle = await handle.getFileHandle(fileName);
+        const text = await readFileHandleAsText(fileHandle);
+        $content.text(text);
+        return;
+      } catch (e) {
+        console.warn('Could not read from FS handle directly, falling back to storage', e);
+      }
+    }
+
+    const storageKey = `usersite_files_${configId}`;
+    const result = await browserAPI.storage.local.get([storageKey]);
+    const files = result[storageKey];
+
+    if (files && files[fileName]) {
+      const dataURL = files[fileName];
+      const base64Content = dataURL.split(',')[1];
+      const text = atob(base64Content);
+      $content.text(text);
+    } else {
+      $content.text('Error: Source file not found in storage.');
+    }
+  } catch (error) {
+    console.error('Error viewing source:', error);
+    $content.text('Error loading source: ' + error.message);
+  }
 }
 
 async function toggleConfig(configId, enabled) {
@@ -450,7 +471,7 @@ async function deleteConfig(configId) {
     });
 
     // Delete stored files
-    await browserAPI.storage.local.remove(`userweb_files_${configId}`);
+    await browserAPI.storage.local.remove(`usersite_files_${configId}`);
     await deleteHandle(configId);
 
     // Reload list
@@ -461,11 +482,6 @@ async function deleteConfig(configId) {
   }
 }
 
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
 
 // Load configs on page load
 $(function () {
@@ -473,49 +489,6 @@ $(function () {
   updateFsBanner();
 });
 
-async function openDb() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('userweb_fs', 1);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('handles')) {
-        db.createObjectStore('handles');
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function saveHandle(configId, handle) {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('handles', 'readwrite');
-    tx.objectStore('handles').put(handle, configId);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function listHandles() {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('handles', 'readonly');
-    const store = tx.objectStore('handles');
-    const req = store.openCursor();
-    const entries = [];
-    req.onsuccess = (e) => {
-      const cursor = e.target.result;
-      if (cursor) {
-        entries.push({ configId: cursor.key, handle: cursor.value });
-        cursor.continue();
-      } else {
-        resolve(entries);
-      }
-    };
-    req.onerror = () => reject(req.error);
-  });
-}
 
 async function ensureHandlePermission(handle) {
   try {
@@ -598,40 +571,7 @@ async function updateFsBanner() {
   }
 }
 
-async function getHandle(configId) {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('handles', 'readonly');
-    const req = tx.objectStore('handles').get(configId);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  });
-}
 
-async function deleteHandle(configId) {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('handles', 'readwrite');
-    tx.objectStore('handles').delete(configId);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function readFileHandleAsDataURL(fileHandle) {
-  const file = await fileHandle.getFile();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve(e.target.result);
-    reader.onerror = (e) => reject(e);
-    reader.readAsDataURL(file);
-  });
-}
-
-async function readFileHandleAsText(fileHandle) {
-  const file = await fileHandle.getFile();
-  return file.text();
-}
 
 async function loadFromDirectoryHandle(dirHandle) {
   const files = [];
@@ -674,7 +614,7 @@ async function rescanConfig(configId) {
       }
     }
     await browserAPI.storage.local.set({
-      [`userweb_files_${configId}`]: fileStorage
+      [`usersite_files_${configId}`]: fileStorage
     });
     const configToSave = { ...loaded.config, id: configId, source: 'fs' };
     await new Promise((resolve, reject) => {
@@ -705,6 +645,6 @@ $('#themeToggle').on('click', () => {
   const currentTheme = document.documentElement.getAttribute('data-bs-theme');
   const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-bs-theme', newTheme);
-  localStorage.setItem('userweb-theme', newTheme);
+  localStorage.setItem('usersite-theme', newTheme);
 });
 

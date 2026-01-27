@@ -1,10 +1,10 @@
-// Example JavaScript file for UserWeb extension
+// Example JavaScript file for UserSite extension
 // This script will be injected into matching websites
 
 (function () {
   'use strict';
 
-  console.log('UserWeb: Example script loaded!');
+  console.log('UserSite: Example script loaded!');
 
   // Example: Add a custom banner
   const banner = document.createElement('div');
@@ -25,6 +25,6 @@
 
   // Example: Log all links
   const links = document.querySelectorAll('a');
-  console.log(`UserWeb: Found ${links.length} links on this page`);
+  console.log(`UserSite: Found ${links.length} links on this page`);
   console.log('UserSiteExample: file;');
 })();

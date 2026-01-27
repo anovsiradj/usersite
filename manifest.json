@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "UserWeb",
+  "name": "UserSite",
   "version": "1.0.0",
   "description": "Minimalist extension to inject custom JS and CSS files into websites",
   "permissions": [
@@ -13,11 +13,12 @@
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "action": {
     "default_popup": "dashboard.html",
-    "default_title": "UserWeb Dashboard",
+    "default_title": "UserSite Dashboard",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
@@ -36,7 +37,7 @@
   "web_accessible_resources": [],
   "browser_specific_settings": {
     "gecko": {
-      "id": "userweb@example.com",
+      "id": "usersite@example.com",
       "strict_min_version": "109.0"
     }
   }

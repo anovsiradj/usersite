@@ -1,13 +1,13 @@
-# UserWeb
+# UserSite
 
 A minimalist browser extension that injects custom JS and CSS files into websites, with optional jQuery injection, similar to user script and user style extensions, but supporting all in one unified tool.
 
 ## Features
 
 - **Dual Support**: Inject both JS and CSS files into websites
-- **jQuery Support**: Optionally inject a specific jQuery version per configuration
 - **Flexible Configuration**: Control where and when files are injected via `config.json`
 - **Dashboard Management**: Easy-to-use dashboard to add, remove, enable, and disable configurations
+- **Vibrant UI**: Modern dashboard with dark mode support
 - **Firefox Compatible**: Built using WebExtensions API for cross-browser compatibility
 - **Minimalist Design**: Simple and clean interface focused on functionality
 
@@ -51,20 +51,23 @@ See the examples folder for sample configurations and config.json structure.
   - Examples: `*://example.com/*`, `https://*.example.com/*`
 - **css** (optional): Array of CSS files to inject
   - Can be a string (file name) or an object with:
-    - `path`: File name
-    - `inject`: Where to inject (`head`, `body-start`, `body-end`)
+    - `file`: File name
+    - `injectAt`: Where to inject (`head`, `body_start`, `body_end`)
 - **js** (optional): Array of JS files to inject
   - Can be a string (file name) or an object with:
-    - `path`: File name
+    - `file`: File name
+    - `code`: Inline JavaScript code to execute
     - `runAt`: When to run (`document_start`, `document_end`, `document_idle`)
-- **jquery** (optional): String version (e.g., `"3.7.1"`) to inject jQuery
+    - `world`: Execution world (`MAIN` or `ISOLATED`, default: `MAIN`)
+- **cssDefault** (optional): Object with default values for all CSS items (e.g., `{"injectAt": "body_end"}`)
+- **jsDefault** (optional): Object with default values for all JS items (e.g., `{"runAt": "document_start", "world": "MAIN"}`)
 - **enabled** (optional): Whether this configuration is enabled (default: `true`)
 
 #### Injection Points
 
 - **head**: Injects into the `<head>` tag
-- **body-start**: Injects at the start of `<body>` tag
-- **body-end**: Injects at the end of `<body>` tag (before closing tag)
+- **body_start**: Injects at the start of `<body>` tag
+- **body_end**: Injects at the end of `<body>` tag (before closing tag)
 
 #### Run At Options
 
@@ -74,7 +77,7 @@ See the examples folder for sample configurations and config.json structure.
 
 ### Adding a Configuration
 
-1. Click the UserWeb extension icon in your browser toolbar
+1. Click the UserSite extension icon in your browser toolbar
 2. Click "Add Configuration"
 3. Select the folder containing your `config.json` and files
 4. Review the preview and click "Save Configuration"

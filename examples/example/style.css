@@ -1,4 +1,4 @@
-/* Example CSS file for UserWeb extension */
+/* Example CSS file for UserSite extension */
 /* This CSS will be injected into matching websites */
 
 body {
@@ -13,7 +13,9 @@ a {
 }
 
 /* Example: Customize headings */
-h1, h2, h3 {
+h1,
+h2,
+h3 {
   color: #2c3e50;
   font-family: 'Arial', sans-serif;
 }

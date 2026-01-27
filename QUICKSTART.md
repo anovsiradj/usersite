@@ -27,7 +27,7 @@
    - Create a folder (e.g., `my-custom-script/`)
    - Add a `config.json` file (see example below)
    - Add your `.js` and/or `.css` files
-   - Click the UserWeb extension icon
+   - Click the UserSite extension icon
    - Click "Add Configuration"
    - Select your folder
 
@@ -37,17 +37,20 @@
 {
   "name": "My Custom Script",
   "matches": ["*://example.com/*"],
-  "jquery": "3.7.1",
   "css": [
     {
-      "path": "style.css",
-      "inject": "head"
+      "file": "style.css",
+      "injectAt": "head"
     }
   ],
   "js": [
     {
-      "path": "script.js",
+      "file": "script.js",
       "runAt": "document_idle"
+    },
+    {
+      "code": "console.log('Inline script running!');",
+      "runAt": "document_end"
     }
   ]
 }

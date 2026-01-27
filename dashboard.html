@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UserWeb Dashboard</title>
+  <title>UserSite Dashboard</title>
 
   <link rel="stylesheet" href="web/vendor.css">
   <link rel="stylesheet" href="dashboard.css">
@@ -14,7 +14,7 @@
   <div class="container-md py-4">
     <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
       <div class="header-main">
-        <h1 class="h3 mb-1 text-emphasis">UserWeb</h1>
+        <h1 class="h3 mb-1 text-emphasis">UserSite</h1>
         <p class="text-secondary small mb-0">Minimalist script & style injector</p>
       </div>
       <button id="themeToggle" class="theme-toggle" title="Toggle color mode">
@@ -40,10 +40,28 @@
       </button>
     </div>
 
-    <div id="configList">
+    <div id="configList" class="accordion shadow-sm border rounded overflow-hidden">
       <div class="text-center py-5 text-secondary">
         <div class="spinner-border spinner-border-sm mb-2" role="status"></div>
         <div class="small">Loading configurations...</div>
+      </div>
+    </div>
+
+    <!-- Source Viewer Modal -->
+    <div id="sourceViewerModal" class="modal fade" tabindex="-1" aria-labelledby="sourceViewerModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="sourceViewerModalLabel">Source Viewer</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body p-0">
+            <pre id="sourceContent" class="m-0 p-3 bg-body-tertiary small" style="min-height: 300px; white-space: pre-wrap; word-break: break-all;"></pre>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -95,8 +113,60 @@
     </div>
   </div>
 
+  <template id="configCardTemplate">
+    <div class="card config-card mb-3">
+      <div class="card-header d-flex align-items-center p-3 cursor-pointer select-none config-card-header" style="cursor: pointer;">
+        <div class="flex-grow-1">
+          <div class="row align-items-center g-3">
+            <div class="col-md-9">
+              <div class="fw-bold text-emphasis text-truncate" data-template-text="name"></div>
+              <div class="small text-secondary text-truncate mt-1" style="font-size: 0.75rem;" data-template-text="description"></div>
+            </div>
+            <div class="col-md-3">
+              <div class="d-flex align-items-center justify-content-end gap-2 px-2 header-actions">
+                <div class="form-check form-switch m-0 p-0" style="min-height: auto;">
+                  <input class="form-check-input ms-0 mt-0 config-toggle" type="checkbox" role="switch">
+                </div>
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-outline-secondary py-0 px-2 rescan-btn" title="Rescan folder">Rescan</button>
+                  <button class="btn btn-outline-danger py-0 px-2 delete-btn" title="Delete configuration">Delete</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ms-3 toggle-arrow" style="transition: transform 0.2s ease;">
+          <span class="small">▼</span>
+        </div>
+      </div>
+      <div class="card-body bg-body-tertiary border-top config-card-body" style="display: none;">
+        <div class="mb-3">
+          <label class="small fw-bold text-body-secondary mb-1 d-block">Matches:</label>
+          <div class="d-flex flex-wrap gap-1" data-template-html="matches"></div>
+        </div>
+        <div class="row">
+          <div class="col-12">
+            <label class="small fw-bold text-body-secondary mb-2 d-block">Sources:</label>
+            <div class="d-flex flex-wrap gap-2 source-list" data-template-html="sources"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <template id="matchBadgeTemplate">
+    <span class="badge rounded-pill text-bg-light border small px-2 py-1" style="font-size: 0.7rem;" data-template-text="match"></span>
+  </template>
+
+  <template id="sourceBadgeTemplate">
+    <div class="badge text-bg-secondary p-1 px-2 d-flex align-items-center gap-1 fw-normal source-badge cursor-pointer" style="cursor: pointer;" title="Click to view source">
+      <span data-template-text="icon"></span>
+      <span data-template-text="name"></span>
+    </div>
+  </template>
+
   <script src="web/vendor.js"></script>
-  <script src="dashboard.js"></script>
+  <script type="module" src="dashboard.js"></script>
 </body>
 
 </html>

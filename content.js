@@ -1,4 +1,4 @@
-// Content script for UserWeb extension
+// Content script for UserSite extension
 // Handles injection of CSS and JS files based on config
 
 (function () {
@@ -20,6 +20,19 @@
       });
       return true; // Keep channel open for async response
     }
+
+    if (message.type === 'CLEANUP' && message.configId) {
+      const elements = document.querySelectorAll(`[data-usersite-config="${message.configId}"]`);
+      elements.forEach(el => el.remove());
+      // Also clear from injectedResources map
+      for (const [key, value] of injectedResources.entries()) {
+        if (key.startsWith(`css-${message.configId}-`) || key.startsWith(`js-${message.configId}-`)) {
+          injectedResources.delete(key);
+        }
+      }
+      sendResponse({ success: true });
+      return false;
+    }
     return false;
   });
 
@@ -30,7 +43,7 @@
     }
 
     try {
-      const storageKey = `userweb_files_${configId}`;
+      const storageKey = `usersite_files_${configId}`;
       const result = await browserAPI.storage.local.get(storageKey);
       const files = result[storageKey] || {};
 
@@ -40,7 +53,7 @@
       }
 
       const existing = document.querySelector(
-        `style[data-userweb-config="${configId}"][data-userweb-css-file="${cssFileName}"]`
+        `style[data-usersite-config="${configId}"][data-usersite-css-file="${cssFileName}"]`
       );
       if (existing) {
         injectedResources.set(cacheKey, existing);
@@ -52,8 +65,8 @@
 
       const styleEl = document.createElement('style');
       styleEl.type = 'text/css';
-      styleEl.setAttribute('data-userweb-config', String(configId));
-      styleEl.setAttribute('data-userweb-css-file', String(cssFileName));
+      styleEl.setAttribute('data-usersite-config', String(configId));
+      styleEl.setAttribute('data-usersite-css-file', String(cssFileName));
       styleEl.textContent = decodedCSS;
 
       if (injectionPoint === 'head') {

@@ -1,92 +1,12 @@
-// Background script for UserWeb extension (simplified, no ES modules)
+// Background script for UserSite extension (simplified, no ES modules)
 // Manages extension state and handles file/config loading
 
 // Browser API compatibility (chrome/browser)
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 
-// Config Manager (inline for compatibility)
-class ConfigManager {
-  constructor() {
-    this.configs = new Map();
-  }
-
-  async loadAllConfigs() {
-    try {
-      const result = await browserAPI.storage.local.get(['userweb_configs']);
-      if (result.userweb_configs) {
-        this.configs = new Map(result.userweb_configs);
-      }
-    } catch (error) {
-      console.error('Error loading configs:', error);
-    }
-  }
-
-  async saveAllConfigs() {
-    try {
-      const configsArray = Array.from(this.configs.entries());
-      await browserAPI.storage.local.set({ userweb_configs: configsArray });
-    } catch (error) {
-      console.error('Error saving configs:', error);
-    }
-  }
-
-  async addConfig(configId, config) {
-    if (!this.validateConfig(config)) {
-      throw new Error('Invalid config format');
-    }
-    config.id = configId;
-    config.enabled = config.enabled !== undefined ? config.enabled : true;
-    this.configs.set(configId, config);
-    await this.saveAllConfigs();
-    return config;
-  }
-
-  getConfig(configId) {
-    return this.configs.get(configId);
-  }
-
-  getAllConfigs() {
-    const configsArray = Array.from(this.configs.values());
-    return Promise.resolve(configsArray);
-  }
-
-  async getConfigForTab(tabId) {
-    try {
-      for (const config of this.configs.values()) {
-        const matches = config.matches;
-        if (!config.enabled || !matches || (Array.isArray(matches) ? !matches.length : !matches)) continue;
-        const matchingTabs = await new Promise(resolve => browserAPI.tabs.query({ url: matches }, (t) => resolve(t || [])));
-        if (matchingTabs.some(t => t.id === tabId)) {
-          return config;
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting config for Tab:', error);
-      return null;
-    }
-  }
-
-
-  async toggleConfig(configId, enabled) {
-    const config = this.configs.get(configId);
-    if (config) {
-      config.enabled = enabled;
-      await this.saveAllConfigs();
-    }
-  }
-
-  async deleteConfig(configId) {
-    this.configs.delete(configId);
-    await this.saveAllConfigs();
-  }
-
-  validateConfig(config) {
-    if (!config || typeof config !== 'object') return false;
-    if (!config.name || typeof config.name !== 'string') return false;
-    return true;
-  }
-}
+// Load shared libraries
+import { ConfigManager } from './lib/config-manager.js';
+import { normalizeRunAt } from './lib/utils.js';
 
 const configManager = new ConfigManager();
 const userScriptsRegistry = new Map();
@@ -108,11 +28,11 @@ async function unregisterScriptsForConfig(configId) {
   }
   if (config) {
     if (Array.isArray(config.js)) {
-      for (const item of config.js) {
-        const name = typeof item === 'string' ? item : (item.file || `inline_${configId}_${Math.random().toString(36).substr(2, 9)}`);
-        const scriptId = `userweb_${configId}_${name}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      config.js.forEach((item, index) => {
+        const name = typeof item === 'string' ? item : (item.file || `inline_${index}`);
+        const scriptId = `usersite_${configId}_${name}`.replace(/[^a-zA-Z0-9_]/g, '_');
         ids.push(scriptId);
-      }
+      });
     }
   }
   if (ids.length) {
@@ -182,13 +102,13 @@ configManager.loadAllConfigs().catch(err => {
 
 // Initialize extension
 browserAPI.runtime.onInstalled.addListener(async () => {
-  console.log('UserWeb extension installed');
+  console.log('UserSite extension installed');
   await configManager.loadAllConfigs();
 });
 
 // Also load on startup (for when extension is already installed)
 browserAPI.runtime.onStartup.addListener(async () => {
-  console.log('UserWeb extension started');
+  console.log('UserSite extension started');
   await configManager.loadAllConfigs();
 });
 
@@ -212,6 +132,17 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await configManager.toggleConfig(message.configId, message.enabled);
         if (message.enabled === false) {
           await unregisterScriptsForConfig(message.configId);
+          // Notify tabs to cleanup
+          const config = configManager.getConfig(message.configId);
+          if (config && config.matches) {
+            browserAPI.tabs.query({ url: config.matches }, (tabs) => {
+              for (const tab of tabs) {
+                if (tab.id) {
+                  browserAPI.tabs.sendMessage(tab.id, { type: 'CLEANUP', configId: message.configId });
+                }
+              }
+            });
+          }
         } else {
           await injectConfigIntoMatchingTabs(message.configId);
         }
@@ -330,16 +261,6 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-function normalizeRunAt(runAt) {
-  const allowed = ['document_start', 'document_end', 'document_idle'];
-  if (!runAt || typeof runAt !== 'string') {
-    return 'document_idle';
-  }
-  if (allowed.indexOf(runAt) !== -1) {
-    return runAt;
-  }
-  return 'document_idle';
-}
 
 async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
   if (!tabId) {
@@ -349,7 +270,7 @@ async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
   let decodedJS = jsCode;
 
   if (!decodedJS && jsFileName) {
-    const storageKey = `userweb_files_${configId}`;
+    const storageKey = `usersite_files_${configId}`;
     const result = await browserAPI.storage.local.get(storageKey);
     const files = result[storageKey] || {};
 
@@ -380,10 +301,18 @@ async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
       if (!config || !matches || (Array.isArray(matches) ? !matches.length : !matches)) {
         return; // skip if matches is empty
       }
-      const scriptKey = `${configId}:${jsFileName || 'inline'}`;
+
+      let name = jsFileName;
+      if (!name && Array.isArray(config.js)) {
+        const index = config.js.findIndex(item => typeof item === 'object' && item.code === jsCode);
+        if (index !== -1) name = `inline_${index}`;
+      }
+      if (!name) name = 'inline_unknown';
+
+      const scriptKey = `${configId}:${name}`;
       if (userScriptsRegistry.has(scriptKey) || pendingRegistrations.has(scriptKey)) return;
       pendingRegistrations.add(scriptKey);
-      const scriptId = `userweb_${configId}_${jsFileName || 'inline_' + Math.random().toString(36).substr(2, 5)}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      const scriptId = `usersite_${configId}_${name}`.replace(/[^a-zA-Z0-9_]/g, '_');
 
       // Find original js item and merge with jsDefault
       const jsItem = (config.js || []).find(item => (typeof item === 'string' ? item : (item.file || item.code)) === (jsFileName || jsCode)) || {};
