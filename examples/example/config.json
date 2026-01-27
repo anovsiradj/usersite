@@ -6,6 +6,10 @@
   ],
   "css": [
     {
+      "file": "https://anovsiradj.github.io/web-skit/main.css",
+      "injectAt": "head"
+    },
+    {
       "file": "style.css",
       "injectAt": "head"
     }
@@ -13,6 +17,10 @@
   "js": [
     {
       "code": "console.log('UserSiteExample: code;');",
+      "runAt": "document_end"
+    },
+    {
+      "file": "https://anovsiradj.github.io/web-skit/main.js",
       "runAt": "document_end"
     },
     {

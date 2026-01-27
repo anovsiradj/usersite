@@ -9,6 +9,7 @@ import {
   readFileHandleAsDataURL,
   readFileHandleAsText
 } from './lib/storage-helper.js';
+import { CacheManager } from './lib/cache-manager.js';
 
 // Theme management
 (function () {
@@ -19,6 +20,7 @@ import {
 })();
 
 const fileWatcher = new FileWatcher();
+const cacheManager = new CacheManager();
 let currentConfigFiles = null;
 let currentConfigData = null;
 
@@ -114,11 +116,9 @@ $saveConfigBtn.on('click', async () => {
   if (!currentConfigData) return;
 
   try {
-    // Generate unique config ID
     const configId = generateConfigId(currentConfigData.name);
-
-    // Store files in extension storage (as data URLs)
     const fileStorage = {};
+
     if (currentConfigData._fsFiles && currentConfigData._fsFiles.length) {
       for (const f of currentConfigData._fsFiles) {
         if (f.name !== 'config.json') {
@@ -135,7 +135,6 @@ $saveConfigBtn.on('click', async () => {
       }
     }
 
-    // Browser API compatibility
     const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 
     // Save files to storage
@@ -143,27 +142,22 @@ $saveConfigBtn.on('click', async () => {
       [`usersite_files_${configId}`]: fileStorage
     });
 
-    // Prepare config without _files
     const configToSave = { ...currentConfigData };
     delete configToSave._files;
     delete configToSave._fsFiles;
     delete configToSave._fsHandle;
     configToSave.source = currentConfigData._fsFiles ? 'fs' : 'storage';
 
-    // Save config using promise-based message sending
-    const saveResponse = await new Promise((resolve, reject) => {
+    // Save config
+    await new Promise((resolve, reject) => {
       browserAPI.runtime.sendMessage({
         type: 'ADD_CONFIG',
         configId: configId,
         config: configToSave
       }, (response) => {
-        if (browserAPI.runtime.lastError) {
-          reject(new Error(browserAPI.runtime.lastError.message));
-        } else if (response && response.success) {
-          resolve(response);
-        } else {
-          reject(new Error('Failed to save configuration'));
-        }
+        if (browserAPI.runtime.lastError) reject(new Error(browserAPI.runtime.lastError.message));
+        else if (response && response.success) resolve(response);
+        else reject(new Error('Failed to save configuration'));
       });
     });
 
@@ -171,10 +165,11 @@ $saveConfigBtn.on('click', async () => {
       await saveHandle(configId, currentConfigData._fsHandle);
     }
 
-    // Reload configs list
     await loadConfigs();
 
-    // Close modal
+    // Start CDN downloads (async, show progress in UI)
+    downloadCdnAssets(configId, configToSave);
+
     bootstrap.Modal.getInstance(document.getElementById('addConfigModal')).hide();
     showAlert('Configuration saved successfully!', 'Success');
   } catch (error) {
@@ -331,10 +326,10 @@ function createConfigCard(config) {
   const processItems = (items, type) => {
     if (!Array.isArray(items)) return;
     items.forEach((item, index) => {
-      if (typeof item === 'string') {
-        files.push({ name: item, type, index });
-      } else if (item.file) {
-        files.push({ name: item.file, type, index });
+      const name = typeof item === 'string' ? item : (item.file || null);
+      if (name) {
+        const isUrl = cacheManager.isUrl(name);
+        files.push({ name, type, index, isUrl });
       } else if (item.code) {
         files.push({ name: `Inline ${type === 'js' ? 'Script' : 'Style'}`, type, index, isInline: true, code: item.code });
       }
@@ -350,9 +345,15 @@ function createConfigCard(config) {
     const fileName = f.isInline ? `inline-${f.type}-${f.index}` : f.name;
     $badge.attr('data-file', fileName);
     if (f.isInline) $badge.data('code', f.code);
+    if (f.isUrl) {
+      $badge.addClass('cdn-badge').attr('data-url', f.name);
+      // placeholder for progress
+      const $progress = $('<span class="cdn-progress small ms-1" style="display:none; font-size: 0.6rem; opacity: 0.8;">(0%)</span>');
+      $badge.append($progress);
+    }
 
     populateTemplate($badge, {
-      icon: f.type === 'js' ? '📜' : '🎨',
+      icon: f.isUrl ? '🌐' : (f.type === 'js' ? '📜' : '🎨'),
       name: f.name
     });
     $sourcesContainer.append($badge).append(' ');
@@ -416,8 +417,15 @@ async function viewSource(configId, fileName) {
       const base64Content = dataURL.split(',')[1];
       const text = atob(base64Content);
       $content.text(text);
+      return;
+    }
+
+    // Try OPFS Cache (CDN)
+    const cachedContent = await cacheManager.getCachedContent(configId, fileName);
+    if (cachedContent) {
+      $content.text(cachedContent);
     } else {
-      $content.text('Error: Source file not found in storage.');
+      $content.text('Error: Source file not found in storage or cache.');
     }
   } catch (error) {
     console.error('Error viewing source:', error);
@@ -484,7 +492,12 @@ async function deleteConfig(configId) {
 
 
 // Load configs on page load
-$(function () {
+$(async function () {
+  try {
+    await cacheManager.init();
+  } catch (e) {
+    console.warn('OPFS not initialized on startup:', e);
+  }
   loadConfigs();
   updateFsBanner();
 });
@@ -616,6 +629,7 @@ async function rescanConfig(configId) {
     await browserAPI.storage.local.set({
       [`usersite_files_${configId}`]: fileStorage
     });
+
     const configToSave = { ...loaded.config, id: configId, source: 'fs' };
     await new Promise((resolve, reject) => {
       browserAPI.runtime.sendMessage({
@@ -633,6 +647,10 @@ async function rescanConfig(configId) {
       });
     });
     await loadConfigs();
+
+    // Start downloading CDN assets and show progress
+    await downloadCdnAssets(configId, configToSave);
+
     showAlert('Configuration rescan completed', 'Success');
   } catch (error) {
     console.error('Error rescanning config:', error);
@@ -647,4 +665,45 @@ $('#themeToggle').on('click', () => {
   document.documentElement.setAttribute('data-bs-theme', newTheme);
   localStorage.setItem('usersite-theme', newTheme);
 });
+
+async function downloadCdnAssets(configId, config) {
+  const cdnAssets = [];
+  const collect = (items) => {
+    if (!Array.isArray(items)) return;
+    items.forEach(item => {
+      const url = typeof item === 'string' ? item : item.file;
+      if (url && cacheManager.isUrl(url)) cdnAssets.push(url);
+    });
+  };
+  collect(config.js);
+  collect(config.css);
+
+  if (cdnAssets.length === 0) return;
+
+  // Find the card for this config in the DOM
+  // Note: we might need a better way to identify the specific card if config IDs are not in DOM attributes
+  // But each config card has a name and we can search for badges.
+
+  for (const url of cdnAssets) {
+    const $badge = $configList.find(`.cdn-badge[data-url="${url}"]`).filter(function () {
+      // Ideally we'd match the specific card, but for now we'll match all with this URL 
+      // (could be multiple configs using same CDN)
+      return true;
+    });
+
+    const $progress = $badge.find('.cdn-progress');
+    $progress.show();
+
+    try {
+      await cacheManager.cacheUrl(configId, url, (percent) => {
+        $progress.text(`(${percent}%)`);
+      });
+      $progress.text('(Cached)');
+      setTimeout(() => $progress.fadeOut(), 3000);
+    } catch (error) {
+      console.error(`Failed to cache ${url}:`, error);
+      $progress.text('(Error)').addClass('text-danger');
+    }
+  }
+}
 

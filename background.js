@@ -7,8 +7,10 @@ const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 // Load shared libraries
 import { ConfigManager } from './lib/config-manager.js';
 import { normalizeRunAt } from './lib/utils.js';
+import { CacheManager } from './lib/cache-manager.js';
 
 const configManager = new ConfigManager();
+const cacheManager = new CacheManager();
 const userScriptsRegistry = new Map();
 const pendingRegistrations = new Set();
 
@@ -16,32 +18,35 @@ async function unregisterScriptsForConfig(configId) {
   if (typeof chrome === 'undefined' || !chrome.userScripts || !chrome.userScripts.unregister) {
     return;
   }
-  const config = configManager.getConfig(configId);
+
   const ids = [];
+
+  // 1. Get IDs from current registry
   const keys = Array.from(userScriptsRegistry.keys());
   for (const key of keys) {
     if (key.startsWith(`${configId}:`)) {
-      const id = userScriptsRegistry.get(key);
-      if (id) ids.push(id);
+      ids.push(userScriptsRegistry.get(key));
       userScriptsRegistry.delete(key);
     }
   }
-  if (config) {
-    if (Array.isArray(config.js)) {
-      config.js.forEach((item, index) => {
-        const name = typeof item === 'string' ? item : (item.file || `inline_${index}`);
-        const scriptId = `usersite_${configId}_${name}`.replace(/[^a-zA-Z0-9_]/g, '_');
-        ids.push(scriptId);
-      });
-    }
+
+  // 2. Proactively try to guess IDs based on the naming convention to be sure
+  // We'll also try to fetch ALL registered scripts and filter them by prefix if possible,
+  // but guess is a good fallback since unregister ignores non-existent and we want to be thorough.
+  const config = configManager.getConfig(configId);
+  if (config && Array.isArray(config.js)) {
+    config.js.forEach((item, index) => {
+      const name = typeof item === 'string' ? item : (item.file || `inline_${index}`);
+      const scriptId = `usersite_${configId}_${name}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      if (!ids.includes(scriptId)) ids.push(scriptId);
+    });
   }
+
   if (ids.length) {
     await new Promise((resolve) => {
       chrome.userScripts.unregister({ ids }, () => {
         const err = chrome.runtime && chrome.runtime.lastError;
-        if (err && /nonexistent script id/i.test(String(err.message))) {
-          // Ignore missing IDs to avoid noisy console warnings
-        }
+        // Ignore "nonexistent" errors
         resolve();
       });
     });
@@ -256,8 +261,14 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: false, error: 'Could not determine tab ID' });
         }
       });
-      return true; // Async response
     }
+  }
+
+  if (message.type === 'GET_CACHED_CONTENT') {
+    cacheManager.init().then(() => cacheManager.getCachedContent(message.configId, message.url))
+      .then(content => sendResponse({ success: true, content }))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
   }
 });
 
@@ -270,16 +281,20 @@ async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
   let decodedJS = jsCode;
 
   if (!decodedJS && jsFileName) {
-    const storageKey = `usersite_files_${configId}`;
-    const result = await browserAPI.storage.local.get(storageKey);
-    const files = result[storageKey] || {};
+    if (cacheManager.isUrl(jsFileName)) {
+      decodedJS = await cacheManager.getCachedContent(configId, jsFileName);
+    } else {
+      const storageKey = `usersite_files_${configId}`;
+      const result = await browserAPI.storage.local.get(storageKey);
+      const files = result[storageKey] || {};
 
-    if (!files[jsFileName]) {
-      throw new Error(`JS file not found: ${jsFileName}`);
+      if (!files[jsFileName]) {
+        throw new Error(`JS file not found: ${jsFileName}`);
+      }
+
+      const jsContent = files[jsFileName].split(',')[1];
+      decodedJS = atob(jsContent);
     }
-
-    const jsContent = files[jsFileName].split(',')[1];
-    decodedJS = atob(jsContent);
   }
 
   if (!decodedJS) {

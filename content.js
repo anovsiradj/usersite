@@ -36,6 +36,15 @@
     return false;
   });
 
+  function isUrl(str) {
+    try {
+      const url = new URL(str);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch (e) {
+      return false;
+    }
+  }
+
   async function injectCSS(configId, cssFileName, injectionPoint = 'head') {
     const cacheKey = `css-${configId}-${cssFileName}`;
     if (injectedResources.has(cacheKey)) {
@@ -43,13 +52,34 @@
     }
 
     try {
-      const storageKey = `usersite_files_${configId}`;
-      const result = await browserAPI.storage.local.get(storageKey);
-      const files = result[storageKey] || {};
+      let decodedCSS = '';
 
-      if (!files[cssFileName]) {
-        console.error(`CSS file not found: ${cssFileName}`);
-        return;
+      if (isUrl(cssFileName)) {
+        const response = await new Promise((resolve) => {
+          browserAPI.runtime.sendMessage({
+            type: 'GET_CACHED_CONTENT',
+            configId: configId,
+            url: cssFileName
+          }, (response) => resolve(response));
+        });
+        if (response && response.success && response.content) {
+          decodedCSS = response.content;
+        } else {
+          console.error(`Cached CSS not found for URL: ${cssFileName}`);
+          return;
+        }
+      } else {
+        const storageKey = `usersite_files_${configId}`;
+        const result = await browserAPI.storage.local.get(storageKey);
+        const files = result[storageKey] || {};
+
+        if (!files[cssFileName]) {
+          console.error(`CSS file not found: ${cssFileName}`);
+          return;
+        }
+
+        const cssContent = files[cssFileName].split(',')[1];
+        decodedCSS = atob(cssContent);
       }
 
       const existing = document.querySelector(
@@ -59,9 +89,6 @@
         injectedResources.set(cacheKey, existing);
         return;
       }
-
-      const cssContent = files[cssFileName].split(',')[1];
-      const decodedCSS = atob(cssContent);
 
       const styleEl = document.createElement('style');
       styleEl.type = 'text/css';
