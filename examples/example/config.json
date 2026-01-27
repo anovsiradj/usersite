@@ -1,0 +1,24 @@
+{
+  "name": "UserSiteExample",
+  "match": [
+    "*://example.com/*",
+    "*://*.example.com/*"
+  ],
+  "css": [
+    {
+      "file": "style.css",
+      "injectAt": "head"
+    }
+  ],
+  "js": [
+    {
+      "code": "console.log('UserSiteExample: code;');",
+      "runAt": "document_end"
+    },
+    {
+      "file": "script.js",
+      "runAt": "document_end"
+    }
+  ],
+  "enabled": true
+}

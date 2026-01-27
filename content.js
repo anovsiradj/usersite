@@ -62,7 +62,7 @@
         } else {
           document.documentElement.appendChild(styleEl);
         }
-      } else if (injectionPoint === 'body-start') {
+      } else if (injectionPoint === 'body_start') {
         if (document.body) {
           document.body.insertBefore(styleEl, document.body.firstChild);
         } else {
@@ -74,7 +74,7 @@
           });
           observer.observe(document.documentElement, { childList: true });
         }
-      } else if (injectionPoint === 'body-end') {
+      } else if (injectionPoint === 'body_end') {
         if (document.body) {
           document.body.appendChild(styleEl);
         } else {
@@ -99,8 +99,8 @@
    * Note: For CSP compliance, JS injection is handled by background script
    * This function just requests the injection
    */
-  async function injectJS(configId, jsFileName, runAt = 'document_idle', tabId) {
-    const cacheKey = `js-${configId}-${jsFileName}`;
+  async function injectJS(configId, jsFileName, runAt = 'document_idle', tabId, jsCode) {
+    const cacheKey = `js-${configId}-${jsFileName || 'inline'}`;
     if (injectedResources.has(cacheKey)) {
       return;
     }
@@ -113,6 +113,7 @@
           type: 'INJECT_JS',
           configId: configId,
           jsFileName: jsFileName,
+          jsCode: jsCode,
           runAt: runAt,
           tabId: tabId
         }, (response) => {
@@ -158,10 +159,9 @@
     // Inject CSS files (CSS can be injected directly)
     if (config.css && Array.isArray(config.css)) {
       for (const cssItem of config.css) {
-        const cssFileName = typeof cssItem === 'string' ? cssItem : cssItem.path;
-        const injectionPoint = typeof cssItem === 'object' && cssItem.inject
-          ? cssItem.inject
-          : 'head';
+        const mergedItem = Object.assign({}, config.cssDefault || {}, typeof cssItem === 'object' ? cssItem : { file: cssItem });
+        const cssFileName = mergedItem.file;
+        const injectionPoint = mergedItem.injectAt || 'head';
 
         await injectCSS(config.id, cssFileName, injectionPoint);
       }
@@ -172,12 +172,12 @@
     // Inject JS files (via background script to bypass CSP)
     if (config.js && Array.isArray(config.js) && tabId) {
       for (const jsItem of config.js) {
-        const jsFileName = typeof jsItem === 'string' ? jsItem : jsItem.path;
-        const runAt = typeof jsItem === 'object' && jsItem.runAt
-          ? jsItem.runAt
-          : 'document_idle';
+        const mergedItem = Object.assign({}, config.jsDefault || {}, typeof jsItem === 'object' ? jsItem : { file: jsItem });
+        const jsFileName = mergedItem.file;
+        const jsCode = mergedItem.code;
+        const runAt = mergedItem.runAt || 'document_idle';
 
-        await injectJS(config.id, jsFileName, runAt, tabId);
+        await injectJS(config.id, jsFileName, runAt, tabId, jsCode);
       }
     }
   }
@@ -222,7 +222,10 @@
       });
 
       if (configResponse && configResponse.success && configResponse.config) {
-        await injectConfig(configResponse.config, tabId);
+        const config = configResponse.config;
+        if (config.match) {
+          await injectConfig(config, tabId);
+        }
       }
     } catch (error) {
       console.error('Error in requestConfig:', error);

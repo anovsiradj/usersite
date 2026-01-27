@@ -50,50 +50,23 @@ class ConfigManager {
     return Promise.resolve(configsArray);
   }
 
-  async getConfigForUrl(url) {
+  async getConfigForTab(tabId) {
     try {
-      const urlObj = new URL(url);
       for (const config of this.configs.values()) {
-        if (!config.enabled) continue;
-        if (this.matchesUrl(config, urlObj)) {
+        const match = config.match;
+        if (!config.enabled || !match || !match.length) continue;
+        const matchingTabs = await new Promise(resolve => browserAPI.tabs.query({ url: match }, (t) => resolve(t || [])));
+        if (matchingTabs.some(t => t.id === tabId)) {
           return config;
         }
       }
       return null;
     } catch (error) {
-      console.error('Error getting config for URL:', error);
+      console.error('Error getting config for Tab:', error);
       return null;
     }
   }
 
-  matchesUrl(config, urlObj) {
-    if (!config.matches || !Array.isArray(config.matches)) {
-      return false;
-    }
-    return config.matches.some(pattern => {
-      return this.matchPattern(pattern, urlObj);
-    });
-  }
-
-  matchPattern(pattern, urlObj) {
-    try {
-      const [scheme, rest] = pattern.split('://');
-      if (!rest) return false;
-      const schemePattern = scheme === '*' ? '[^:]+' : scheme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const [host, path] = rest.split('/', 2);
-      let hostPattern = host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        .replace(/\\\*/g, '.*')
-        .replace(/\\\?/g, '.');
-      const pathPattern = path ? path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        .replace(/\\\*/g, '.*')
-        .replace(/\\\?/g, '.') : '.*';
-      const regex = new RegExp(`^${schemePattern}://${hostPattern}/${pathPattern}$`);
-      return regex.test(urlObj.href);
-    } catch (error) {
-      console.error('Error matching pattern:', pattern, error);
-      return false;
-    }
-  }
 
   async toggleConfig(configId, enabled) {
     const config = this.configs.get(configId);
@@ -111,12 +84,6 @@ class ConfigManager {
   validateConfig(config) {
     if (!config || typeof config !== 'object') return false;
     if (!config.name || typeof config.name !== 'string') return false;
-    if (!config.matches || !Array.isArray(config.matches) || config.matches.length === 0) return false;
-    const hasJS = Array.isArray(config.js) && config.js.length > 0;
-    const hasCSS = Array.isArray(config.css) && config.css.length > 0;
-    if (!hasJS && !hasCSS) {
-      return false;
-    }
     return true;
   }
 }
@@ -140,10 +107,9 @@ async function unregisterScriptsForConfig(configId) {
     }
   }
   if (config) {
-    const baseIdSanitize = (s) => String(s).replace(/[^a-zA-Z0-9_]/g, '_');
     if (Array.isArray(config.js)) {
       for (const item of config.js) {
-        const name = typeof item === 'string' ? item : item.path;
+        const name = typeof item === 'string' ? item : (item.file || `inline_${configId}_${Math.random().toString(36).substr(2, 9)}`);
         const scriptId = `userweb_${configId}_${name}`.replace(/[^a-zA-Z0-9_]/g, '_');
         ids.push(scriptId);
       }
@@ -195,17 +161,15 @@ async function sendInjectToTab(tabId, config) {
 
 async function injectConfigIntoMatchingTabs(configId) {
   const config = configManager.getConfig(configId);
-  if (!config || !config.enabled) return;
+  const match = config ? config.match : null;
+  if (!config || !config.enabled || !match || !match.length) return;
   const tabs = await new Promise((resolve) => {
-    browserAPI.tabs.query({}, (t) => resolve(t || []));
+    browserAPI.tabs.query({ url: match }, (t) => resolve(t || []));
   });
   for (const tab of tabs) {
-    if (tab && tab.id && tab.url) {
+    if (tab && tab.id) {
       try {
-        const urlObj = new URL(tab.url);
-        if (configManager.matchesUrl(config, urlObj)) {
-          await sendInjectToTab(tab.id, config);
-        }
+        await sendInjectToTab(tab.id, config);
       } catch (_) { }
     }
   }
@@ -320,19 +284,24 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'GET_CONFIG') {
-    configManager.getConfigForUrl(message.url)
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({ success: false, error: 'No tab ID found' });
+      return;
+    }
+    configManager.getConfigForTab(tabId)
       .then(config => {
         sendResponse({ success: true, config });
       })
       .catch(error => {
-        console.error('Error getting config for URL:', error);
+        console.error('Error getting config for Tab:', error);
         sendResponse({ success: false, error: error.message });
       });
     return true;
   }
 
   if (message.type === 'INJECT_JS') {
-    injectJSFile(message.configId, message.jsFileName, message.runAt || 'document_idle', message.tabId || sender.tab?.id).then(() => {
+    injectJS(message.configId, message.jsFileName, message.jsCode, message.runAt || 'document_idle', message.tabId || sender.tab?.id).then(() => {
       sendResponse({ success: true });
     }).catch((error) => {
       sendResponse({ success: false, error: error.message });
@@ -372,21 +341,29 @@ function normalizeRunAt(runAt) {
   return 'document_idle';
 }
 
-async function injectJSFile(configId, jsFileName, runAt, tabId) {
+async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
   if (!tabId) {
     throw new Error('Tab ID is required for JS injection');
   }
 
-  const storageKey = `userweb_files_${configId}`;
-  const result = await browserAPI.storage.local.get(storageKey);
-  const files = result[storageKey] || {};
+  let decodedJS = jsCode;
 
-  if (!files[jsFileName]) {
-    throw new Error(`JS file not found: ${jsFileName}`);
+  if (!decodedJS && jsFileName) {
+    const storageKey = `userweb_files_${configId}`;
+    const result = await browserAPI.storage.local.get(storageKey);
+    const files = result[storageKey] || {};
+
+    if (!files[jsFileName]) {
+      throw new Error(`JS file not found: ${jsFileName}`);
+    }
+
+    const jsContent = files[jsFileName].split(',')[1];
+    decodedJS = atob(jsContent);
   }
 
-  const jsContent = files[jsFileName].split(',')[1];
-  const decodedJS = atob(jsContent);
+  if (!decodedJS) {
+    throw new Error('No JS code provided for injection');
+  }
 
   const normalizedRunAt = normalizeRunAt(runAt);
 
@@ -399,20 +376,33 @@ async function injectJSFile(configId, jsFileName, runAt, tabId) {
     const userScriptsAPI = (typeof chrome !== 'undefined' && chrome.userScripts) || (typeof browser !== 'undefined' && browser.userScripts);
     if (userScriptsAPI && userScriptsAPI.register) {
       const config = configManager.getConfig(configId);
-      if (!config || !config.matches || !config.matches.length) {
-        throw new Error('Config not found for userScripts');
+      const match = config ? config.match : null;
+      if (!config || !match || !match.length) {
+        return; // skip if match is empty
       }
-      const scriptKey = `${configId}:${jsFileName}`;
+      const scriptKey = `${configId}:${jsFileName || 'inline'}`;
       if (userScriptsRegistry.has(scriptKey) || pendingRegistrations.has(scriptKey)) return;
       pendingRegistrations.add(scriptKey);
-      const scriptId = `userweb_${configId}_${jsFileName}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      const scriptId = `userweb_${configId}_${jsFileName || 'inline_' + Math.random().toString(36).substr(2, 5)}`.replace(/[^a-zA-Z0-9_]/g, '_');
+
+      // Find original js item and merge with jsDefault
+      const jsItem = (config.js || []).find(item => (typeof item === 'string' ? item : (item.file || item.code)) === (jsFileName || jsCode)) || {};
+      const mergedItem = Object.assign({ world: 'MAIN' }, config.jsDefault || {}, typeof jsItem === 'object' ? jsItem : { file: jsItem });
+
+      // Strip non-API properties (like path, description) from registration options
+      const registrationOptions = {
+        id: scriptId,
+        matches: match,
+        js: [{ code: decodedJS }],
+        runAt: normalizedRunAt,
+        world: mergedItem.world || 'MAIN',
+      };
+
+      if (mergedItem.allFrames !== undefined) registrationOptions.allFrames = mergedItem.allFrames;
+      if (mergedItem.excludeMatches !== undefined) registrationOptions.excludeMatches = mergedItem.excludeMatches;
+
       const registered = await new Promise((resolve) => {
-        userScriptsAPI.register([{
-          id: scriptId,
-          matches: config.matches,
-          js: [{ code: decodedJS }],
-          runAt: normalizedRunAt
-        }], () => {
+        userScriptsAPI.register([registrationOptions], () => {
           const err = browserAPI.runtime.lastError;
           if (err && String(err.message).toLowerCase().includes('duplicate script id')) {
             resolve(true);
@@ -469,7 +459,7 @@ async function injectJSFile(configId, jsFileName, runAt, tabId) {
 browserAPI.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
     try {
-      const config = await configManager.getConfigForUrl(tab.url);
+      const config = await configManager.getConfigForTab(tabId);
       if (config && config.enabled) {
         await sendInjectToTab(tabId, config);
       }

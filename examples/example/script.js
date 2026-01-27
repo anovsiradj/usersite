@@ -1,11 +1,11 @@
 // Example JavaScript file for UserWeb extension
 // This script will be injected into matching websites
 
-(function() {
+(function () {
   'use strict';
-  
+
   console.log('UserWeb: Example script loaded!');
-  
+
   // Example: Add a custom banner
   const banner = document.createElement('div');
   banner.style.cssText = `
@@ -20,11 +20,11 @@
     z-index: 10000;
     font-family: Arial, sans-serif;
   `;
-  banner.textContent = 'UserSite(5): Custom script is active!';
+  banner.textContent = 'UserSite: Custom script is active!';
   document.body.insertBefore(banner, document.body.firstChild);
-  
+
   // Example: Log all links
   const links = document.querySelectorAll('a');
   console.log(`UserWeb: Found ${links.length} links on this page`);
-  
+  console.log('UserSiteExample: file;');
 })();
