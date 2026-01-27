@@ -11,32 +11,40 @@
 </head>
 
 <body>
-  <div class="container">
-    <header>
-      <h1>UserWeb</h1>
-      <p class="subtitle">Minimalist script & style injector</p>
+  <div class="container-md py-4">
+    <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+      <div class="header-main">
+        <h1 class="h3 mb-1 text-emphasis">UserWeb</h1>
+        <p class="text-secondary small mb-0">Minimalist script & style injector</p>
+      </div>
+      <button id="themeToggle" class="theme-toggle" title="Toggle color mode">
+        🌓
+      </button>
     </header>
 
-    <div id="fsBanner" class="banner" hidden>
-      <div class="banner-content">
-        <span class="banner-text">Extension does not have access to your folders. Grant access to enable rescan.</span>
-        <button id="fsGrantBtn" class="btn btn-success btn-small">Grant Access</button>
+    <div id="fsBanner" class="alert alert-warning d-flex align-items-center justify-content-between mb-4 border-2 shadow-sm" role="alert" hidden>
+      <div class="d-flex align-items-center">
+        <span class="small">extension does not have access to your folders. grant access to enable rescan.</span>
       </div>
+      <button id="fsGrantBtn" class="btn btn-success btn-sm px-3 fw-bold">Grant Access</button>
     </div>
 
-    <div class="actions">
-      <button id="addConfigBtn" class="btn btn-primary">
-        <span class="icon">+</span>
+    <div class="d-flex justify-content-center gap-2 mb-4">
+      <button id="addConfigBtn" class="btn btn-primary d-flex align-items-center gap-2 px-4 shadow-sm">
+        <span class="fs-5 mb-0">+</span>
         Add Configuration
       </button>
-      <button id="reloadBtn" class="btn btn-secondary">
-        <span class="icon">↻</span>
-        Reload Configs
+      <button id="reloadBtn" class="btn btn-outline-secondary d-flex align-items-center gap-2 shadow-sm">
+        <span>↻</span>
+        Reload All
       </button>
     </div>
 
-    <div id="configList" class="config-list">
-      <div class="loading">Loading configurations...</div>
+    <div id="configList">
+      <div class="text-center py-5 text-secondary">
+        <div class="spinner-border spinner-border-sm mb-2" role="status"></div>
+        <div class="small">Loading configurations...</div>
+      </div>
     </div>
 
     <div id="addConfigModal" class="modal fade" tabindex="-1" aria-labelledby="addConfigModalLabel" aria-hidden="true">
@@ -68,7 +76,7 @@
         </div>
       </div>
     </div>
-    
+
     <div id="alertModal" class="modal fade" tabindex="-1" aria-labelledby="alertModalLabel" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">

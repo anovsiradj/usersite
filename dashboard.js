@@ -1,5 +1,13 @@
 // Dashboard script for UserWeb extension
 
+// Theme management
+(function () {
+  const savedTheme = localStorage.getItem('userweb-theme');
+  const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const theme = savedTheme || systemTheme;
+  document.documentElement.setAttribute('data-bs-theme', theme);
+})();
+
 // FileWatcher implementation (inline for compatibility)
 class FileWatcher {
   async readDirectory(files) {
@@ -9,15 +17,15 @@ class FileWatcher {
     for (const file of files) {
       const path = file.webkitRelativePath || file.name;
       const pathParts = path.split('/');
-      
+
       if (pathParts.length > 1) {
         const dirName = pathParts[0];
         const fileName = pathParts[pathParts.length - 1];
-        
+
         if (!fileMap[dirName]) {
           fileMap[dirName] = { files: [], config: null };
         }
-        
+
         fileMap[dirName].files.push({ file, fileName, path });
       } else {
         if (!fileMap['']) {
@@ -29,19 +37,19 @@ class FileWatcher {
 
     for (const [dirName, dirData] of Object.entries(fileMap)) {
       const configFile = dirData.files.find(f => f.fileName === 'config.json');
-      
+
       if (configFile) {
         try {
           const configText = await this.readFileAsText(configFile.file);
           const config = JSON.parse(configText);
           dirData.config = config;
-          
+
           config._files = dirData.files.map(f => ({
             name: f.fileName,
             path: f.path,
             file: f.file
           }));
-          
+
           configs[dirName || 'root'] = dirData.config;
         } catch (error) {
           console.error(`Error reading config.json in ${dirName}:`, error);
@@ -119,15 +127,15 @@ $pickDirBtn.on('click', async () => {
       currentConfigData._fsHandle = dirHandle;
       currentConfigData._fsFiles = loaded.files;
       displayConfigPreview(currentConfigData);
-      saveConfigBtn.disabled = false;
+      $saveConfigBtn.prop('disabled', false);
     } else {
       showAlert('No valid config.json found in selected folder', 'Warning');
-      saveConfigBtn.disabled = true;
+      $saveConfigBtn.prop('disabled', true);
     }
   } catch (error) {
     console.error('Error picking directory:', error);
     showAlert('Error picking directory: ' + error.message, 'Error');
-    saveConfigBtn.disabled = true;
+    $saveConfigBtn.prop('disabled', true);
   }
 });
 
@@ -145,21 +153,21 @@ $configFolderInput.on('change', async (e) => {
   try {
     currentConfigFiles = files;
     const configs = await fileWatcher.readDirectory(files);
-    
+
     // For now, handle first config found
     const configKey = Object.keys(configs)[0];
     if (configKey && configs[configKey]) {
       currentConfigData = configs[configKey];
       displayConfigPreview(currentConfigData);
-      saveConfigBtn.disabled = false;
+      $saveConfigBtn.prop('disabled', false);
     } else {
       showAlert('No valid config.json found in selected folder', 'Warning');
-      saveConfigBtn.disabled = true;
+      $saveConfigBtn.prop('disabled', true);
     }
   } catch (error) {
     console.error('Error reading folder:', error);
     showAlert('Error reading folder: ' + error.message, 'Error');
-    saveConfigBtn.disabled = true;
+    $saveConfigBtn.prop('disabled', true);
   }
 });
 
@@ -169,7 +177,7 @@ $saveConfigBtn.on('click', async () => {
   try {
     // Generate unique config ID
     const configId = generateConfigId(currentConfigData.name);
-    
+
     // Store files in extension storage (as data URLs)
     const fileStorage = {};
     if (currentConfigData._fsFiles && currentConfigData._fsFiles.length) {
@@ -190,7 +198,7 @@ $saveConfigBtn.on('click', async () => {
 
     // Browser API compatibility
     const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-    
+
     // Save files to storage
     await browserAPI.storage.local.set({
       [`userweb_files_${configId}`]: fileStorage
@@ -226,7 +234,7 @@ $saveConfigBtn.on('click', async () => {
 
     // Reload configs list
     await loadConfigs();
-    
+
     // Close modal
     bootstrap.Modal.getInstance(document.getElementById('addConfigModal')).hide();
     showAlert('Configuration saved successfully!', 'Success');
@@ -260,10 +268,9 @@ function displayConfigPreview(config) {
     matches: config.matches,
     js: config.js || [],
     css: config.css || [],
-    jquery: config.jquery,
     enabled: config.enabled !== undefined ? config.enabled : true
   };
-  
+
   $configPreviewContent.text(JSON.stringify(preview, null, 2));
   $configPreview.show();
 }
@@ -288,7 +295,7 @@ async function loadConfigs() {
         }
       });
     });
-    
+
     if (response && response.success && response.configs) {
       displayConfigs(response.configs);
     } else {
@@ -301,13 +308,13 @@ async function loadConfigs() {
 }
 
 function displayConfigs(configs) {
-  if (configs.length === 0) {
+  if (!configs || configs.length === 0) {
     $configList.html('<div class="empty-state">No configurations found. Click \"Add Configuration\" to get started.</div>');
     return;
   }
 
   $configList.html(configs.map(config => createConfigCard(config)).join(''));
-  
+
   // Attach event listeners
   configs.forEach(config => {
     const toggleId = `toggle-${config.id}`;
@@ -353,42 +360,44 @@ function createConfigCard(config) {
   }
 
   return `
-    <div class="config-card ${config.enabled ? '' : 'disabled'}">
-      <div class="config-header">
-        <div>
-          <div class="config-title">${escapeHtml(config.name)}</div>
-          ${config.description ? `<div class="config-description">${escapeHtml(config.description)}</div>` : ''}
-        </div>
-        <div class="config-controls">
-          <label class="toggle-switch">
-            <input type="checkbox" id="toggle-${config.id}" ${config.enabled ? 'checked' : ''}>
-            <span class="toggle-slider"></span>
-          </label>
-          <button class="btn btn-secondary btn-small" id="rescan-${config.id}">Rescan</button>
-          <button class="btn btn-danger btn-small" id="delete-${config.id}">Delete</button>
-        </div>
-      </div>
-      <div class="config-details">
-        <div class="config-detail-row">
-          <span class="config-detail-label">Matches:</span>
-          <span class="config-detail-value">
-            <div class="config-match-patterns">
-              ${config.matches.map(m => `<span class="match-pattern">${escapeHtml(m)}</span>`).join('')}
+    <div class="card config-card ${config.enabled ? '' : 'disabled'} mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <div>
+            <h5 class="card-title h6 mb-1 text-emphasis">${escapeHtml(config.name)}</h5>
+            ${config.description ? `<p class="card-text small text-secondary mb-0">${escapeHtml(config.description)}</p>` : ''}
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <div class="form-check form-switch me-2">
+              <input class="form-check-input" type="checkbox" role="switch" id="toggle-${config.id}" ${config.enabled ? 'checked' : ''}>
             </div>
-          </span>
+            <button class="btn btn-outline-secondary btn-sm" id="rescan-${config.id}" title="Rescan folder">Rescan</button>
+            <button class="btn btn-outline-danger btn-sm" id="delete-${config.id}" title="Delete configuration">Delete</button>
+          </div>
         </div>
-        <div class="config-detail-row">
-          <span class="config-detail-label">Files:</span>
-          <span class="config-detail-value">
-            <div class="file-list">
-              ${files.map(f => `
-                <div class="file-item">
-                  <span class="file-icon">${f.type === 'js' ? '📜' : '🎨'}</span>
-                  <span>${escapeHtml(f.name)}</span>
-                </div>
-              `).join('')}
+        
+        <div class="config-details border-top pt-3">
+          <div class="row mb-2">
+            <div class="col-sm-2 small fw-bold text-body-secondary">Matches:</div>
+            <div class="col-sm-10">
+              <div class="d-flex flex-wrap gap-1">
+                ${config.matches.map(m => `<span class="badge rounded-pill text-bg-light border">${escapeHtml(m)}</span>`).join('')}
+              </div>
             </div>
-          </span>
+          </div>
+          <div class="row">
+            <div class="col-sm-2 small fw-bold text-body-secondary">Files:</div>
+            <div class="col-sm-10">
+              <div class="d-flex flex-wrap gap-1">
+                ${files.map(f => `
+                  <div class="badge text-bg-secondary p-1 px-2 d-flex align-items-center gap-1 fw-normal">
+                    <span>${f.type === 'js' ? '📜' : '🎨'}</span>
+                    <span>${escapeHtml(f.name)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -413,7 +422,7 @@ async function toggleConfig(configId, enabled) {
         }
       });
     });
-    
+
     // Reload to reflect changes
     await loadConfigs();
   } catch (error) {
@@ -439,11 +448,11 @@ async function deleteConfig(configId) {
         }
       });
     });
-    
+
     // Delete stored files
     await browserAPI.storage.local.remove(`userweb_files_${configId}`);
     await deleteHandle(configId);
-    
+
     // Reload list
     await loadConfigs();
   } catch (error) {
@@ -459,7 +468,7 @@ function escapeHtml(text) {
 }
 
 // Load configs on page load
-$(function() {
+$(function () {
   loadConfigs();
   updateFsBanner();
 });
@@ -523,20 +532,19 @@ async function ensureHandlePermission(handle) {
 async function requestFsPermissionsViaGesture() {
   try {
     const entries = await listHandles();
+    console.log('Found handles for permission request:', entries.length);
     if (entries.length) {
       for (const entry of entries) {
-        await ensureHandlePermission(entry.handle);
+        console.log('Requesting permission for configId:', entry.configId);
+        const granted = await ensureHandlePermission(entry.handle);
+        console.log('Permission for', entry.configId, 'granted:', granted);
       }
       return;
     }
-    if ('showDirectoryPicker' in window) {
-      try {
-        await window.showDirectoryPicker();
-      } catch (_) {}
-    } else {
-      showAlert('File System Access API not supported in this browser', 'Warning');
-    }
-  } catch (_) {}
+    showAlert('No folder access saved. Use "Pick Folder" in the Add Configuration modal.', 'Info');
+  } catch (err) {
+    console.error('Error requesting permissions:', err);
+  }
 }
 
 async function updateFsBanner() {
@@ -576,11 +584,16 @@ async function updateFsBanner() {
       }
     }
     if ($fsBanner.length) {
-      $fsBanner.prop('hidden', !needs);
+      if (needs) {
+        $fsBanner.removeAttr('hidden');
+      } else {
+        $fsBanner.attr('hidden', 'hidden');
+      }
     }
-  } catch (_) {
+  } catch (err) {
+    console.error('Error updating FS banner:', err);
     if ($fsBanner.length) {
-      $fsBanner.prop('hidden', true);
+      $fsBanner.attr('hidden', 'hidden');
     }
   }
 }
@@ -686,4 +699,12 @@ async function rescanConfig(configId) {
     showAlert('Error rescanning configuration: ' + error.message, 'Error');
   }
 }
+
+// Theme toggle listener
+$('#themeToggle').on('click', () => {
+  const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-bs-theme', newTheme);
+  localStorage.setItem('userweb-theme', newTheme);
+});
 

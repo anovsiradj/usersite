@@ -53,9 +53,9 @@ class ConfigManager {
   async getConfigForTab(tabId) {
     try {
       for (const config of this.configs.values()) {
-        const match = config.match;
-        if (!config.enabled || !match || !match.length) continue;
-        const matchingTabs = await new Promise(resolve => browserAPI.tabs.query({ url: match }, (t) => resolve(t || [])));
+        const matches = config.matches;
+        if (!config.enabled || !matches || (Array.isArray(matches) ? !matches.length : !matches)) continue;
+        const matchingTabs = await new Promise(resolve => browserAPI.tabs.query({ url: matches }, (t) => resolve(t || [])));
         if (matchingTabs.some(t => t.id === tabId)) {
           return config;
         }
@@ -161,10 +161,10 @@ async function sendInjectToTab(tabId, config) {
 
 async function injectConfigIntoMatchingTabs(configId) {
   const config = configManager.getConfig(configId);
-  const match = config ? config.match : null;
-  if (!config || !config.enabled || !match || !match.length) return;
+  const matches = config ? config.matches : null;
+  if (!config || !config.enabled || !matches || (Array.isArray(matches) ? !matches.length : !matches)) return;
   const tabs = await new Promise((resolve) => {
-    browserAPI.tabs.query({ url: match }, (t) => resolve(t || []));
+    browserAPI.tabs.query({ url: matches }, (t) => resolve(t || []));
   });
   for (const tab of tabs) {
     if (tab && tab.id) {
@@ -376,9 +376,9 @@ async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
     const userScriptsAPI = (typeof chrome !== 'undefined' && chrome.userScripts) || (typeof browser !== 'undefined' && browser.userScripts);
     if (userScriptsAPI && userScriptsAPI.register) {
       const config = configManager.getConfig(configId);
-      const match = config ? config.match : null;
-      if (!config || !match || !match.length) {
-        return; // skip if match is empty
+      const matches = config ? config.matches : null;
+      if (!config || !matches || (Array.isArray(matches) ? !matches.length : !matches)) {
+        return; // skip if matches is empty
       }
       const scriptKey = `${configId}:${jsFileName || 'inline'}`;
       if (userScriptsRegistry.has(scriptKey) || pendingRegistrations.has(scriptKey)) return;
@@ -392,7 +392,7 @@ async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
       // Strip non-API properties (like path, description) from registration options
       const registrationOptions = {
         id: scriptId,
-        matches: match,
+        matches: matches,
         js: [{ code: decodedJS }],
         runAt: normalizedRunAt,
         world: mergedItem.world || 'MAIN',

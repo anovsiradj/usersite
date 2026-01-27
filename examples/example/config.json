@@ -1,6 +1,6 @@
 {
   "name": "UserSiteExample",
-  "match": [
+  "matches": [
     "*://example.com/*",
     "*://*.example.com/*"
   ],

@@ -223,7 +223,7 @@
 
       if (configResponse && configResponse.success && configResponse.config) {
         const config = configResponse.config;
-        if (config.match) {
+        if (config.matches) {
           await injectConfig(config, tabId);
         }
       }
