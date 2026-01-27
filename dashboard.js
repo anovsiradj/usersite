@@ -87,6 +87,12 @@ const $saveConfigBtn = $('#saveConfigBtn');
 const $fsBanner = $('#fsBanner');
 const $fsGrantBtn = $('#fsGrantBtn');
 
+function showAlert(message, title = 'Notice') {
+  $('#alertModalLabel').text(title);
+  $('#alertModalBody').text(message);
+  new bootstrap.Modal(document.getElementById('alertModal')).show();
+}
+
 // Event Listeners (jQuery)
 $addConfigBtn.on('click', () => {
   new bootstrap.Modal(document.getElementById('addConfigModal')).show();
@@ -102,7 +108,7 @@ $('#addConfigModal').on('hidden.bs.modal', () => {
 
 $pickDirBtn.on('click', async () => {
   if (!window.showDirectoryPicker) {
-    alert('File System Access API not supported in this browser');
+    showAlert('File System Access API not supported in this browser', 'Warning');
     return;
   }
   try {
@@ -115,12 +121,12 @@ $pickDirBtn.on('click', async () => {
       displayConfigPreview(currentConfigData);
       saveConfigBtn.disabled = false;
     } else {
-      alert('No valid config.json found in selected folder');
+      showAlert('No valid config.json found in selected folder', 'Warning');
       saveConfigBtn.disabled = true;
     }
   } catch (error) {
     console.error('Error picking directory:', error);
-    alert('Error picking directory: ' + error.message);
+    showAlert('Error picking directory: ' + error.message, 'Error');
     saveConfigBtn.disabled = true;
   }
 });
@@ -147,12 +153,12 @@ $configFolderInput.on('change', async (e) => {
       displayConfigPreview(currentConfigData);
       saveConfigBtn.disabled = false;
     } else {
-      alert('No valid config.json found in selected folder');
+      showAlert('No valid config.json found in selected folder', 'Warning');
       saveConfigBtn.disabled = true;
     }
   } catch (error) {
     console.error('Error reading folder:', error);
-    alert('Error reading folder: ' + error.message);
+    showAlert('Error reading folder: ' + error.message, 'Error');
     saveConfigBtn.disabled = true;
   }
 });
@@ -223,10 +229,10 @@ $saveConfigBtn.on('click', async () => {
     
     // Close modal
     bootstrap.Modal.getInstance(document.getElementById('addConfigModal')).hide();
-    alert('Configuration saved successfully!');
+    showAlert('Configuration saved successfully!', 'Success');
   } catch (error) {
     console.error('Error saving config:', error);
-    alert('Error saving configuration: ' + error.message);
+    showAlert('Error saving configuration: ' + error.message, 'Error');
   }
 });
 $reloadBtn.on('click', async () => {
@@ -244,7 +250,7 @@ $reloadBtn.on('click', async () => {
     await loadConfigs();
   } catch (error) {
     console.error('Error reloading configs:', error);
-    alert('Error reloading configurations: ' + error.message);
+    showAlert('Error reloading configurations: ' + error.message, 'Error');
   }
 });
 
@@ -412,7 +418,7 @@ async function toggleConfig(configId, enabled) {
     await loadConfigs();
   } catch (error) {
     console.error('Error toggling config:', error);
-    alert('Error toggling configuration: ' + error.message);
+    showAlert('Error toggling configuration: ' + error.message, 'Error');
   }
 }
 
@@ -442,7 +448,7 @@ async function deleteConfig(configId) {
     await loadConfigs();
   } catch (error) {
     console.error('Error deleting config:', error);
-    alert('Error deleting configuration: ' + error.message);
+    showAlert('Error deleting configuration: ' + error.message, 'Error');
   }
 }
 
@@ -528,7 +534,7 @@ async function requestFsPermissionsViaGesture() {
         await window.showDirectoryPicker();
       } catch (_) {}
     } else {
-      alert('File System Access API not supported in this browser');
+      showAlert('File System Access API not supported in this browser', 'Warning');
     }
   } catch (_) {}
 }
@@ -639,12 +645,12 @@ async function rescanConfig(configId) {
   try {
     const dirHandle = await getHandle(configId);
     if (!dirHandle) {
-      alert('No folder access saved for this configuration. Re-add using directory picker.');
+      showAlert('No folder access saved for this configuration. Re-add using directory picker.', 'Warning');
       return;
     }
     const loaded = await loadFromDirectoryHandle(dirHandle);
     if (!loaded) {
-      alert('Failed to read folder. Please re-authorize access.');
+      showAlert('Failed to read folder. Please re-authorize access.', 'Warning');
       return;
     }
     const fileStorage = {};
@@ -674,10 +680,10 @@ async function rescanConfig(configId) {
       });
     });
     await loadConfigs();
-    alert('Configuration rescan completed');
+    showAlert('Configuration rescan completed', 'Success');
   } catch (error) {
     console.error('Error rescanning config:', error);
-    alert('Error rescanning configuration: ' + error.message);
+    showAlert('Error rescanning configuration: ' + error.message, 'Error');
   }
 }
 

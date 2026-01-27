@@ -1,9 +1,9 @@
 // Content script for UserWeb extension
 // Handles injection of CSS and JS files based on config
 
-(function() {
+(function () {
   'use strict';
-  
+
   // Browser API compatibility (chrome/browser)
   const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 
@@ -33,7 +33,7 @@
       const storageKey = `userweb_files_${configId}`;
       const result = await browserAPI.storage.local.get(storageKey);
       const files = result[storageKey] || {};
-      
+
       if (!files[cssFileName]) {
         console.error(`CSS file not found: ${cssFileName}`);
         return;
@@ -132,34 +132,7 @@
     }
   }
 
-  async function injectJQuery(configId, version, runAt = 'document_start', tabId) {
-    const cacheKey = `jquery-${version}`;
-    if (injectedResources.has(cacheKey)) {
-      return;
-    }
-    try {
-      const response = await new Promise((resolve, reject) => {
-        browserAPI.runtime.sendMessage({
-          type: 'INJECT_JQUERY',
-          configId: configId,
-          version: version,
-          runAt: runAt,
-          tabId: tabId
-        }, (response) => {
-          if (browserAPI.runtime.lastError) {
-            reject(new Error(browserAPI.runtime.lastError.message));
-          } else {
-            resolve(response);
-          }
-        });
-      });
-      if (response && response.success) {
-        injectedResources.set(cacheKey, true);
-      }
-    } catch (error) {
-      console.error(`Error injecting jQuery ${version}:`, error);
-    }
-  }
+
 
   /**
    * Inject all resources from config
@@ -186,27 +159,24 @@
     if (config.css && Array.isArray(config.css)) {
       for (const cssItem of config.css) {
         const cssFileName = typeof cssItem === 'string' ? cssItem : cssItem.path;
-        const injectionPoint = typeof cssItem === 'object' && cssItem.inject 
-          ? cssItem.inject 
+        const injectionPoint = typeof cssItem === 'object' && cssItem.inject
+          ? cssItem.inject
           : 'head';
-        
+
         await injectCSS(config.id, cssFileName, injectionPoint);
       }
     }
 
-    // jQuery (optional): version string
-    if (tabId && typeof config.jquery === 'string') {
-      await injectJQuery(config.id, config.jquery, 'document_start', tabId);
-    }
+
 
     // Inject JS files (via background script to bypass CSP)
     if (config.js && Array.isArray(config.js) && tabId) {
       for (const jsItem of config.js) {
         const jsFileName = typeof jsItem === 'string' ? jsItem : jsItem.path;
-        const runAt = typeof jsItem === 'object' && jsItem.runAt 
-          ? jsItem.runAt 
+        const runAt = typeof jsItem === 'object' && jsItem.runAt
+          ? jsItem.runAt
           : 'document_idle';
-        
+
         await injectJS(config.id, jsFileName, runAt, tabId);
       }
     }

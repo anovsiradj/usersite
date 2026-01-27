@@ -82,11 +82,11 @@ class ConfigManager {
       const schemePattern = scheme === '*' ? '[^:]+' : scheme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const [host, path] = rest.split('/', 2);
       let hostPattern = host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-                            .replace(/\\\*/g, '.*')
-                            .replace(/\\\?/g, '.');
+        .replace(/\\\*/g, '.*')
+        .replace(/\\\?/g, '.');
       const pathPattern = path ? path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-                                     .replace(/\\\*/g, '.*')
-                                     .replace(/\\\?/g, '.') : '.*';
+        .replace(/\\\*/g, '.*')
+        .replace(/\\\?/g, '.') : '.*';
       const regex = new RegExp(`^${schemePattern}://${hostPattern}/${pathPattern}$`);
       return regex.test(urlObj.href);
     } catch (error) {
@@ -114,8 +114,7 @@ class ConfigManager {
     if (!config.matches || !Array.isArray(config.matches) || config.matches.length === 0) return false;
     const hasJS = Array.isArray(config.js) && config.js.length > 0;
     const hasCSS = Array.isArray(config.css) && config.css.length > 0;
-    const hasJQ = typeof config.jquery === 'string' && config.jquery.length > 0;
-    if (!hasJS && !hasCSS && !hasJQ) {
+    if (!hasJS && !hasCSS) {
       return false;
     }
     return true;
@@ -124,6 +123,7 @@ class ConfigManager {
 
 const configManager = new ConfigManager();
 const userScriptsRegistry = new Map();
+const pendingRegistrations = new Set();
 
 async function unregisterScriptsForConfig(configId) {
   if (typeof chrome === 'undefined' || !chrome.userScripts || !chrome.userScripts.unregister) {
@@ -133,7 +133,7 @@ async function unregisterScriptsForConfig(configId) {
   const ids = [];
   const keys = Array.from(userScriptsRegistry.keys());
   for (const key of keys) {
-    if (key.startsWith(`${configId}:`) || key.startsWith(`jquery:${configId}:`)) {
+    if (key.startsWith(`${configId}:`)) {
       const id = userScriptsRegistry.get(key);
       if (id) ids.push(id);
       userScriptsRegistry.delete(key);
@@ -148,14 +148,14 @@ async function unregisterScriptsForConfig(configId) {
         ids.push(scriptId);
       }
     }
-    if (typeof config.jquery === 'string' && config.jquery.length) {
-      const jqId = `userweb_jquery_${configId}_${config.jquery}`.replace(/[^a-zA-Z0-9_]/g, '_');
-      ids.push(jqId);
-    }
   }
   if (ids.length) {
     await new Promise((resolve) => {
       chrome.userScripts.unregister({ ids }, () => {
+        const err = chrome.runtime && chrome.runtime.lastError;
+        if (err && /nonexistent script id/i.test(String(err.message))) {
+          // Ignore missing IDs to avoid noisy console warnings
+        }
         resolve();
       });
     });
@@ -206,7 +206,7 @@ async function injectConfigIntoMatchingTabs(configId) {
         if (configManager.matchesUrl(config, urlObj)) {
           await sendInjectToTab(tab.id, config);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
   }
 }
@@ -288,14 +288,34 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'RELOAD_CONFIGS') {
-    configManager.loadAllConfigs()
-      .then(() => {
+    (async () => {
+      try {
+        await configManager.loadAllConfigs();
+        const ids = Array.from(userScriptsRegistry.values());
+        if (typeof chrome !== 'undefined' && chrome.userScripts && chrome.userScripts.unregister && ids.length) {
+          await new Promise((resolve) => {
+            chrome.userScripts.unregister({ ids }, () => {
+              const err = chrome.runtime && chrome.runtime.lastError;
+              if (err && /nonexistent script id/i.test(String(err.message))) {
+                // Ignore missing IDs to avoid noisy console warnings
+              }
+              resolve();
+            });
+          });
+        }
+        userScriptsRegistry.clear();
+        const configs = await configManager.getAllConfigs();
+        for (const cfg of configs) {
+          if (cfg && cfg.enabled) {
+            await injectConfigIntoMatchingTabs(cfg.id);
+          }
+        }
         sendResponse({ success: true });
-      })
-      .catch(error => {
+      } catch (error) {
         console.error('Error reloading configs:', error);
         sendResponse({ success: false, error: error.message });
-      });
+      }
+    })();
     return true;
   }
 
@@ -320,14 +340,7 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'INJECT_JQUERY') {
-    injectJQuery(message.configId, message.version, message.runAt || 'document_start', message.tabId || sender.tab?.id).then(() => {
-      sendResponse({ success: true });
-    }).catch((error) => {
-      sendResponse({ success: false, error: error.message });
-    });
-    return true;
-  }
+
 
   if (message.type === 'GET_TAB_ID') {
     // Get tab ID from the sender
@@ -367,7 +380,7 @@ async function injectJSFile(configId, jsFileName, runAt, tabId) {
   const storageKey = `userweb_files_${configId}`;
   const result = await browserAPI.storage.local.get(storageKey);
   const files = result[storageKey] || {};
-  
+
   if (!files[jsFileName]) {
     throw new Error(`JS file not found: ${jsFileName}`);
   }
@@ -383,104 +396,53 @@ async function injectJSFile(configId, jsFileName, runAt, tabId) {
   }
 
   try {
-    if (typeof chrome !== 'undefined' && chrome.userScripts && chrome.userScripts.register) {
+    const userScriptsAPI = (typeof chrome !== 'undefined' && chrome.userScripts) || (typeof browser !== 'undefined' && browser.userScripts);
+    if (userScriptsAPI && userScriptsAPI.register) {
       const config = configManager.getConfig(configId);
       if (!config || !config.matches || !config.matches.length) {
         throw new Error('Config not found for userScripts');
       }
       const scriptKey = `${configId}:${jsFileName}`;
-      let scriptId = `userweb_${configId}_${jsFileName}`.replace(/[^a-zA-Z0-9_]/g, '_');
-      // Proactively unregister deterministic ID to avoid duplicates (handles service worker restarts)
-      await new Promise((resolve) => {
-        chrome.userScripts.unregister({ ids: [scriptId] }, () => {
-          resolve();
-        });
-      });
-      await new Promise((resolve, reject) => {
-        chrome.userScripts.register([{
+      if (userScriptsRegistry.has(scriptKey) || pendingRegistrations.has(scriptKey)) return;
+      pendingRegistrations.add(scriptKey);
+      const scriptId = `userweb_${configId}_${jsFileName}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      const registered = await new Promise((resolve) => {
+        userScriptsAPI.register([{
           id: scriptId,
           matches: config.matches,
           js: [{ code: decodedJS }],
           runAt: normalizedRunAt
         }], () => {
-          const err = chrome.runtime.lastError;
-          if (err) {
-            reject(new Error(err.message));
+          const err = browserAPI.runtime.lastError;
+          if (err && String(err.message).toLowerCase().includes('duplicate script id')) {
+            resolve(true);
+          } else if (err) {
+            resolve(false);
           } else {
-            userScriptsRegistry.set(scriptKey, scriptId);
-            resolve();
+            resolve(true);
           }
         });
       });
+      pendingRegistrations.delete(scriptKey);
+      if (registered) {
+        userScriptsRegistry.set(scriptKey, scriptId);
+      } else {
+        throw new Error('Failed to register userScript');
+      }
       return;
     }
 
     if (browserAPI.scripting) {
-      const injectViaSandboxFunction = function(configIdParam, fileNameParam, codeString, sandboxUrl) {
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = 'none';
-        iframe.sandbox = 'allow-scripts allow-same-origin';
-        iframe.src = sandboxUrl;
-
-        const injectionId = `userweb-${configIdParam}-${fileNameParam}-${Date.now()}`;
-
-        const messageHandler = (event) => {
-          if (!event.data) return;
-          if (event.data.type === 'SANDBOX_READY') {
-            if (iframe.contentWindow) {
-              iframe.contentWindow.postMessage({
-                type: 'LOAD_SCRIPT',
-                code: codeString,
-                id: injectionId
-              }, '*');
-            }
-          } else if (event.data.type === 'SCRIPT_LOADED' && event.data.id === injectionId) {
-            window.removeEventListener('message', messageHandler);
-            setTimeout(() => {
-              if (iframe.parentNode) {
-                iframe.parentNode.removeChild(iframe);
-              }
-            }, 1000);
-            if (!event.data.success) {
-              console.error(`Failed to load script in sandbox: ${event.data.error}`);
-            }
-          }
-        };
-
-        window.addEventListener('message', messageHandler);
-
-        const inject = () => {
-          if (document.body) {
-            document.body.appendChild(iframe);
-          } else if (document.head) {
-            document.head.appendChild(iframe);
-          } else {
-            const observer = new MutationObserver(() => {
-              if (document.body || document.head) {
-                (document.body || document.head).appendChild(iframe);
-                observer.disconnect();
-              }
-            });
-            observer.observe(document.documentElement, { childList: true });
-          }
-        };
-
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', inject);
-        } else {
-          inject();
-        }
-      };
-
-      const sandboxUrl = browserAPI.runtime.getURL('sandbox.html');
-
+      // Direct injection for browsers without userScripts API
       await browserAPI.scripting.executeScript({
         target: { tabId: tabId },
-        func: injectViaSandboxFunction,
-        args: [configId, jsFileName, decodedJS, sandboxUrl],
+        func: (codeString) => {
+          const scriptEl = document.createElement('script');
+          scriptEl.textContent = codeString;
+          (document.head || document.documentElement).appendChild(scriptEl);
+          scriptEl.remove();
+        },
+        args: [decodedJS],
         world: 'ISOLATED',
         injectImmediately: injectImmediately
       });
@@ -503,101 +465,6 @@ async function injectJSFile(configId, jsFileName, runAt, tabId) {
   }
 }
 
-async function getJQueryCode(version) {
-  const ver = String(version);
-  const cacheKey = `userweb_jquery_${ver}`;
-  const cached = await browserAPI.storage.local.get(cacheKey);
-  if (cached && cached[cacheKey]) {
-    return cached[cacheKey];
-  }
-  const url = `https://code.jquery.com/jquery-${ver}.min.js`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch jQuery ${ver}: ${res.status}`);
-  }
-  const text = await res.text();
-  await browserAPI.storage.local.set({ [cacheKey]: text });
-  return text;
-}
-
-async function injectJQuery(configId, version, runAt, tabId) {
-  if (!tabId) {
-    throw new Error('Tab ID is required for jQuery injection');
-  }
-  const normalizedRunAt = normalizeRunAt(runAt);
-  let injectImmediately = false;
-  if (normalizedRunAt === 'document_start') {
-    injectImmediately = true;
-  }
-  const code = await getJQueryCode(version);
-  try {
-    if (typeof chrome !== 'undefined' && chrome.userScripts && chrome.userScripts.register) {
-      const config = configManager.getConfig(configId);
-      if (!config || !config.matches || !config.matches.length) {
-        throw new Error('Config not found for userScripts');
-      }
-      const scriptKey = `jquery:${configId}:${version}`;
-      let scriptId = `userweb_jquery_${configId}_${version}`.replace(/[^a-zA-Z0-9_]/g, '_');
-      await new Promise((resolve) => {
-        chrome.userScripts.unregister({ ids: [scriptId] }, () => {
-          resolve();
-        });
-      });
-      await new Promise((resolve, reject) => {
-        chrome.userScripts.register([{
-          id: scriptId,
-          matches: config.matches,
-          js: [{ code }],
-          runAt: normalizedRunAt
-        }], () => {
-          const err = chrome.runtime.lastError;
-          if (err) {
-            reject(new Error(err.message));
-          } else {
-            userScriptsRegistry.set(scriptKey, scriptId);
-            resolve();
-          }
-        });
-      });
-      return;
-    }
-
-    if (browserAPI.scripting) {
-      const injectCodeFunction = function(codeString) {
-        try {
-          const scriptEl = document.createElement('script');
-          scriptEl.textContent = codeString;
-          (document.head || document.documentElement).appendChild(scriptEl);
-          scriptEl.remove();
-        } catch (e) {
-          console.error('Error injecting jQuery:', e);
-        }
-      };
-      await browserAPI.scripting.executeScript({
-        target: { tabId: tabId },
-        func: injectCodeFunction,
-        args: [code],
-        world: 'ISOLATED',
-        injectImmediately: injectImmediately
-      });
-    } else if (browserAPI.tabs && browserAPI.tabs.executeScript) {
-      await new Promise((resolve, reject) => {
-        browserAPI.tabs.executeScript(tabId, { code }, () => {
-          if (browserAPI.runtime.lastError) {
-            reject(new Error(browserAPI.runtime.lastError.message));
-          } else {
-            resolve();
-          }
-        });
-      });
-    } else {
-      throw new Error('Scripting API not available');
-    }
-  } catch (error) {
-    console.error('Error injecting jQuery:', error);
-    throw error;
-  }
-}
 // Watch for tab updates to inject scripts/styles
 browserAPI.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
