@@ -65,22 +65,10 @@ async function sendInjectToTab(tabId, config) {
       });
     });
   } catch (_) {
-    if (browserAPI.scripting) {
-      await browserAPI.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ['content.js']
-      });
-      await new Promise((resolve) => {
-        browserAPI.tabs.sendMessage(tabId, { type: 'INJECT', config }, () => resolve());
-      });
-    } else if (browserAPI.tabs && browserAPI.tabs.executeScript) {
-      await new Promise((resolve) => {
-        browserAPI.tabs.executeScript(tabId, { file: 'content.js' }, () => resolve());
-      });
-      await new Promise((resolve) => {
-        browserAPI.tabs.sendMessage(tabId, { type: 'INJECT', config }, () => resolve());
-      });
-    }
+    // If message fails, it usually means content script is not ready or tab is closing.
+    // Since content.js is now a content script, we don't need manual injection fallback.
+    // We can just log the error or ignore it.
+    console.debug(`Could not send inject message to tab ${tabId}`);
   }
 }
 
@@ -366,35 +354,11 @@ async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
       return;
     }
 
-    if (browserAPI.scripting) {
-      // Direct injection for browsers without userScripts API
-      await browserAPI.scripting.executeScript({
-        target: { tabId: tabId },
-        func: (codeString) => {
-          const scriptEl = document.createElement('script');
-          scriptEl.textContent = codeString;
-          (document.head || document.documentElement).appendChild(scriptEl);
-          scriptEl.remove();
-        },
-        args: [decodedJS],
-        world: 'ISOLATED',
-        injectImmediately: injectImmediately
-      });
-    } else if (browserAPI.tabs && browserAPI.tabs.executeScript) {
-      await new Promise((resolve, reject) => {
-        browserAPI.tabs.executeScript(tabId, { code: decodedJS }, () => {
-          if (browserAPI.runtime.lastError) {
-            reject(new Error(browserAPI.runtime.lastError.message));
-          } else {
-            resolve();
-          }
-        });
-      });
-    } else {
-      throw new Error('Scripting API not available');
-    }
+
+
+    throw new Error('userScripts API not available');
   } catch (error) {
-    console.error(`Error injecting JS via scripting API:`, error);
+    console.error(`Error registering user script:`, error);
     throw error;
   }
 }

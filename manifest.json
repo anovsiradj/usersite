@@ -6,11 +6,21 @@
   "permissions": [
     "storage",
     "tabs",
-    "scripting",
     "userScripts"
   ],
   "host_permissions": [
     "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
   ],
   "background": {
     "service_worker": "background.js",
