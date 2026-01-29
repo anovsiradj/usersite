@@ -2,8 +2,8 @@
 /* This CSS will be injected into matching websites */
 
 body {
-  background-color: black !important;
-  color: red;
+  background-color: darkblue !important;
+  color: orangered;
 }
 
 /* Example: Highlight all links */

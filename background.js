@@ -2,12 +2,15 @@
 // Manages extension state and handles file/config loading
 
 // Browser API compatibility (chrome/browser)
+// We mostly use 'chrome' namespace which is supported by both (callback-based in FF)
+// For userScripts, we use our adapter.
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 
 // Load shared libraries
 import { ConfigManager } from './lib/config-manager.js';
 import { normalizeRunAt } from './lib/utils.js';
 import { CacheManager } from './lib/cache-manager.js';
+import { UserScripts } from './lib/api-adapter.js';
 
 const configManager = new ConfigManager();
 const cacheManager = new CacheManager();
@@ -15,10 +18,6 @@ const userScriptsRegistry = new Map();
 const pendingRegistrations = new Set();
 
 async function unregisterScriptsForConfig(configId) {
-  if (typeof chrome === 'undefined' || !chrome.userScripts || !chrome.userScripts.unregister) {
-    return;
-  }
-
   const ids = [];
 
   // 1. Get IDs from current registry
@@ -30,9 +29,7 @@ async function unregisterScriptsForConfig(configId) {
     }
   }
 
-  // 2. Proactively try to guess IDs based on the naming convention to be sure
-  // We'll also try to fetch ALL registered scripts and filter them by prefix if possible,
-  // but guess is a good fallback since unregister ignores non-existent and we want to be thorough.
+  // 2. Proactively try to guess IDs based on the naming convention
   const config = configManager.getConfig(configId);
   if (config && Array.isArray(config.js)) {
     config.js.forEach((item, index) => {
@@ -43,13 +40,7 @@ async function unregisterScriptsForConfig(configId) {
   }
 
   if (ids.length) {
-    await new Promise((resolve) => {
-      chrome.userScripts.unregister({ ids }, () => {
-        const err = chrome.runtime && chrome.runtime.lastError;
-        // Ignore "nonexistent" errors
-        resolve();
-      });
-    });
+    await UserScripts.unregister(ids);
   }
 }
 
@@ -76,9 +67,14 @@ async function injectConfigIntoMatchingTabs(configId) {
   const config = configManager.getConfig(configId);
   const matches = config ? config.matches : null;
   if (!config || !config.enabled || !matches || (Array.isArray(matches) ? !matches.length : !matches)) return;
-  const tabs = await new Promise((resolve) => {
-    browserAPI.tabs.query({ url: matches }, (t) => resolve(t || []));
-  });
+  let tabs = [];
+  if (typeof browser !== 'undefined') {
+    tabs = await browser.tabs.query({ url: matches });
+  } else {
+    tabs = await new Promise((resolve) => {
+      chrome.tabs.query({ url: matches }, (t) => resolve(t || []));
+    });
+  }
   for (const tab of tabs) {
     if (tab && tab.id) {
       try {
@@ -180,16 +176,8 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         await configManager.loadAllConfigs();
         const ids = Array.from(userScriptsRegistry.values());
-        if (typeof chrome !== 'undefined' && chrome.userScripts && chrome.userScripts.unregister && ids.length) {
-          await new Promise((resolve) => {
-            chrome.userScripts.unregister({ ids }, () => {
-              const err = chrome.runtime && chrome.runtime.lastError;
-              if (err && /nonexistent script id/i.test(String(err.message))) {
-                // Ignore missing IDs to avoid noisy console warnings
-              }
-              resolve();
-            });
-          });
+        if (ids.length) {
+          await UserScripts.unregister(ids);
         }
         userScriptsRegistry.clear();
         const configs = await configManager.getAllConfigs();
@@ -297,66 +285,45 @@ async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
   }
 
   try {
-    const userScriptsAPI = (typeof chrome !== 'undefined' && chrome.userScripts) || (typeof browser !== 'undefined' && browser.userScripts);
-    if (userScriptsAPI && userScriptsAPI.register) {
-      const config = configManager.getConfig(configId);
-      const matches = config ? config.matches : null;
-      if (!config || !matches || (Array.isArray(matches) ? !matches.length : !matches)) {
-        return; // skip if matches is empty
-      }
 
-      let name = jsFileName;
-      if (!name && Array.isArray(config.js)) {
-        const index = config.js.findIndex(item => typeof item === 'object' && item.code === jsCode);
-        if (index !== -1) name = `inline_${index}`;
-      }
-      if (!name) name = 'inline_unknown';
-
-      const scriptKey = `${configId}:${name}`;
-      if (userScriptsRegistry.has(scriptKey) || pendingRegistrations.has(scriptKey)) return;
-      pendingRegistrations.add(scriptKey);
-      const scriptId = `usersite_${configId}_${name}`.replace(/[^a-zA-Z0-9_]/g, '_');
-
-      // Find original js item and merge with jsDefault
-      const jsItem = (config.js || []).find(item => (typeof item === 'string' ? item : (item.file || item.code)) === (jsFileName || jsCode)) || {};
-      const mergedItem = Object.assign({ world: 'MAIN' }, config.jsDefault || {}, typeof jsItem === 'object' ? jsItem : { file: jsItem });
-
-      // Strip non-API properties (like path, description) from registration options
-      const registrationOptions = {
-        id: scriptId,
-        matches: matches,
-        js: [{ code: decodedJS }],
-        runAt: normalizedRunAt,
-        world: mergedItem.world || 'MAIN',
-      };
-
-      if (mergedItem.allFrames !== undefined) registrationOptions.allFrames = mergedItem.allFrames;
-      if (mergedItem.excludeMatches !== undefined) registrationOptions.excludeMatches = mergedItem.excludeMatches;
-
-      const registered = await new Promise((resolve) => {
-        userScriptsAPI.register([registrationOptions], () => {
-          const err = browserAPI.runtime.lastError;
-          if (err && String(err.message).toLowerCase().includes('duplicate script id')) {
-            resolve(true);
-          } else if (err) {
-            resolve(false);
-          } else {
-            resolve(true);
-          }
-        });
-      });
-      pendingRegistrations.delete(scriptKey);
-      if (registered) {
-        userScriptsRegistry.set(scriptKey, scriptId);
-      } else {
-        throw new Error('Failed to register userScript');
-      }
-      return;
+    const config = configManager.getConfig(configId);
+    const matches = config ? config.matches : null;
+    if (!config || !matches || (Array.isArray(matches) ? !matches.length : !matches)) {
+      return; // skip if matches is empty
     }
 
+    let name = jsFileName;
+    if (!name && Array.isArray(config.js)) {
+      const index = config.js.findIndex(item => typeof item === 'object' && item.code === jsCode);
+      if (index !== -1) name = `inline_${index}`;
+    }
+    if (!name) name = 'inline_unknown';
 
+    const scriptKey = `${configId}:${name}`;
+    if (userScriptsRegistry.has(scriptKey) || pendingRegistrations.has(scriptKey)) return;
+    pendingRegistrations.add(scriptKey);
+    const scriptId = `usersite_${configId}_${name}`.replace(/[^a-zA-Z0-9_]/g, '_');
 
-    throw new Error('userScripts API not available');
+    // Find original js item and merge with jsDefault
+    const jsItem = (config.js || []).find(item => (typeof item === 'string' ? item : (item.file || item.code)) === (jsFileName || jsCode)) || {};
+    const mergedItem = Object.assign({ world: 'MAIN' }, config.jsDefault || {}, typeof jsItem === 'object' ? jsItem : { file: jsItem });
+
+    // Strip non-API properties (like path, description) from registration options
+    const registrationOptions = {
+      id: scriptId,
+      matches: matches,
+      js: [{ code: decodedJS }],
+      runAt: normalizedRunAt,
+      world: mergedItem.world || 'MAIN',
+    };
+
+    if (mergedItem.allFrames !== undefined) registrationOptions.allFrames = mergedItem.allFrames;
+    if (mergedItem.excludeMatches !== undefined) registrationOptions.excludeMatches = mergedItem.excludeMatches;
+
+    await UserScripts.register([registrationOptions]);
+
+    pendingRegistrations.delete(scriptKey);
+    userScriptsRegistry.set(scriptKey, scriptId);
   } catch (error) {
     console.error(`Error registering user script:`, error);
     throw error;

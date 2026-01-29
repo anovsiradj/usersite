@@ -1,6 +1,7 @@
 // Dashboard script for UserSite extension
 import { FileWatcher } from './lib/file-watcher.js';
 import { escapeHtml, generateConfigId } from './lib/utils.js';
+import { createHandleFromFiles } from './lib/fs-adapter.js';
 import {
   saveHandle,
   getHandle,
@@ -88,23 +89,33 @@ if ($fsGrantBtn.length) {
 }
 
 $configFolderInput.on('change', async (e) => {
-  const files = Array.from(e.target.files);
-  if (files.length === 0) return;
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
 
   try {
-    currentConfigFiles = files;
-    const configs = await fileWatcher.readDirectory(files);
+    currentConfigFiles = Array.from(files);
 
-    // For now, handle first config found
-    const configKey = Object.keys(configs)[0];
-    if (configKey && configs[configKey]) {
-      currentConfigData = configs[configKey];
+    // Use the FS Adapter to create a Virtual Handle
+    const dirHandle = createHandleFromFiles(files);
+
+    // Now we can use the same loader logic!
+    const loaded = await loadFromDirectoryHandle(dirHandle);
+
+    if (loaded) {
+      currentConfigData = loaded.config;
+      // Store the virtual handle (saveHandle specific logic will skip persisting it)
+      currentConfigData._fsHandle = dirHandle;
+      currentConfigData._fsFiles = loaded.files;
       displayConfigPreview(currentConfigData);
       $saveConfigBtn.prop('disabled', false);
+
+      // Update UI to show this is non-persistent
+      // Maybe show a hint via alert or console?
     } else {
       showAlert('No valid config.json found in selected folder', 'Warning');
       $saveConfigBtn.prop('disabled', true);
     }
+
   } catch (error) {
     console.error('Error reading folder:', error);
     showAlert('Error reading folder: ' + error.message, 'Error');

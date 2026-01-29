@@ -27,4 +27,5 @@
   const links = document.querySelectorAll('a');
   console.log(`UserSite: Found ${links.length} links on this page`);
   console.log('UserSiteExample: file;');
+
 })();

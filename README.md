@@ -1,30 +1,28 @@
 # UserSite
 
-A minimalist browser extension that injects custom JS and CSS files into websites, with optional jQuery injection, similar to user script and user style extensions, but supporting all in one unified tool.
+A browser extension that injects custom JS and CSS files into websites, with optional jQuery injection, similar to user script and user style extensions, but supporting all in one unified tool.
 
 ## Features
 
 - **Dual Support**: Inject both JS and CSS files into websites
 - **Flexible Configuration**: Control where and when files are injected via `config.json`
 - **Dashboard Management**: Easy-to-use dashboard to add, remove, enable, and disable configurations
-- **Vibrant UI**: Modern dashboard with dark mode support
-- **Firefox Compatible**: Built using WebExtensions API for cross-browser compatibility
-- **Minimalist Design**: Simple and clean interface focused on functionality
+- **Cross-browser**: Built using WebExtensions API
 
 ## Installation
 
 ### For Firefox
 
-1. Download or clone this repository
+1. clone this repository
 2. Open Firefox and navigate to `about:debugging`
 3. Click "This Firefox"
 4. Click "Load Temporary Add-on..."
 5. Select the `manifest.json` file from this directory
 
-### For Chrome/Edge
+### For Chrome (including its variants)
 
-1. Download or clone this repository
-2. Open Chrome/Edge and navigate to `chrome://extensions` or `edge://extensions`
+1. clone this repository
+2. Open Chrome and navigate to `chrome://extensions`
 3. Enable "Developer mode"
 4. Click "Load unpacked"
 5. Select the project directory
@@ -37,9 +35,9 @@ A minimalist browser extension that injects custom JS and CSS files into website
 2. Inside the folder, create a `config.json` file
 3. Add your JS (`.js`) and/or CSS (`.css`) files to the same folder
 
-### Config.json Format
+### config.json format
 
-See the examples folder for sample configurations and config.json structure.
+see `./examples/example/config.json` for complete example.
 
 #### Configuration Fields
 
@@ -63,13 +61,13 @@ See the examples folder for sample configurations and config.json structure.
 - **jsDefault** (optional): Object with default values for all JS items (e.g., `{"runAt": "document_start", "world": "MAIN"}`)
 - **enabled** (optional): Whether this configuration is enabled (default: `true`)
 
-#### Injection Points
+#### CSS Injection Points
 
 - **head**: Injects into the `<head>` tag
 - **body_start**: Injects at the start of `<body>` tag
 - **body_end**: Injects at the end of `<body>` tag (before closing tag)
 
-#### Run At Options
+#### JS Run At Options
 
 - **document_start**: Run as soon as possible
 - **document_end**: Run after DOM is ready
@@ -88,49 +86,22 @@ See the examples folder for sample configurations and config.json structure.
 - **Delete**: Click the "Delete" button (this action cannot be undone)
 - **Reload**: Click "Reload Configs" to refresh the configuration list
 
-## Example
-
-See the `examples` folder for complete example configurations.
-
-## Development
-
-### Project Structure
-
-```
-userweb/
-├── manifest.json           # Extension manifest
-├── background.js           # Background script (service worker)
-├── content.js              # Content script for injection
-├── dashboard.html          # Dashboard UI
-├── dashboard.css           # Dashboard styles
-├── dashboard.js            # Dashboard logic
-├── lib/                    # Library files (optional)
-│   ├── config-manager.js
-│   └── file-watcher.js
-├── icons/                  # Extension icons (create these)
-└── examples/               # Example configurations
-```
-
-### Creating Icons
-
-You need to create icon files in the `icons/` directory:
-- `icon-16.png` (16x16 pixels)
-- `icon-48.png` (48x48 pixels)
-- `icon-128.png` (128x128 pixels)
-
 ## Browser Compatibility
 
 - **Firefox**: 109.0 or later (Manifest V3)
-- **Chrome**: 88 or later (Manifest V3)
-- **Edge**: 88 or later (Manifest V3)
+- **Chrome (including its variants)**: 88 or later (Manifest V3)
+
+## development
+
+see `./deno.json` for more information.
 
 ## License
 
-MIT License - feel free to use and modify as needed.
+see `./LICENSE.txt` for more information.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## Notes
 

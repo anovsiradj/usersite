@@ -6,6 +6,10 @@
   ],
   "css": [
     {
+      "code": "html, body { font-family: 'Comic Sans MS', cursive; }",
+      "injectAt": "head"
+    },
+    {
       "file": "https://anovsiradj.github.io/web-skit/main.css",
       "injectAt": "head"
     },

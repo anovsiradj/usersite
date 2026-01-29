@@ -5,7 +5,7 @@
   'use strict';
 
   // Browser API compatibility (chrome/browser)
-  const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+  const browserAPI = chrome;
 
   // Store injected resources to prevent duplicates
   const injectedResources = new Map();
@@ -45,41 +45,43 @@
     }
   }
 
-  async function injectCSS(configId, cssFileName, injectionPoint = 'head') {
+  async function injectCSS(configId, cssFileName, injectionPoint = 'head', cssCode = null) {
     const cacheKey = `css-${configId}-${cssFileName}`;
     if (injectedResources.has(cacheKey)) {
       return;
     }
 
     try {
-      let decodedCSS = '';
+      let decodedCSS = cssCode || '';
 
-      if (isUrl(cssFileName)) {
-        const response = await new Promise((resolve) => {
-          browserAPI.runtime.sendMessage({
-            type: 'GET_CACHED_CONTENT',
-            configId: configId,
-            url: cssFileName
-          }, (response) => resolve(response));
-        });
-        if (response && response.success && response.content) {
-          decodedCSS = response.content;
+      if (!decodedCSS) {
+        if (isUrl(cssFileName)) {
+          const response = await new Promise((resolve) => {
+            browserAPI.runtime.sendMessage({
+              type: 'GET_CACHED_CONTENT',
+              configId: configId,
+              url: cssFileName
+            }, (response) => resolve(response));
+          });
+          if (response && response.success && response.content) {
+            decodedCSS = response.content;
+          } else {
+            console.error(`Cached CSS not found for URL: ${cssFileName}`);
+            return;
+          }
         } else {
-          console.error(`Cached CSS not found for URL: ${cssFileName}`);
-          return;
-        }
-      } else {
-        const storageKey = `usersite_files_${configId}`;
-        const result = await browserAPI.storage.local.get(storageKey);
-        const files = result[storageKey] || {};
+          const storageKey = `usersite_files_${configId}`;
+          const result = await browserAPI.storage.local.get(storageKey);
+          const files = result[storageKey] || {};
 
-        if (!files[cssFileName]) {
-          console.error(`CSS file not found: ${cssFileName}`);
-          return;
-        }
+          if (!files[cssFileName]) {
+            console.error(`CSS file not found: ${cssFileName}`);
+            return;
+          }
 
-        const cssContent = files[cssFileName].split(',')[1];
-        decodedCSS = atob(cssContent);
+          const cssContent = files[cssFileName].split(',')[1];
+          decodedCSS = atob(cssContent);
+        }
       }
 
       const existing = document.querySelector(
@@ -198,12 +200,19 @@
 
     // Inject CSS files (CSS can be injected directly)
     if (config.css && Array.isArray(config.css)) {
-      for (const cssItem of config.css) {
+      for (const [index, cssItem] of config.css.entries()) {
         const mergedItem = Object.assign({}, config.cssDefault || {}, typeof cssItem === 'object' ? cssItem : { file: cssItem });
-        const cssFileName = mergedItem.file;
+        let cssFileName = mergedItem.file;
+        const cssCode = mergedItem.code;
         const injectionPoint = mergedItem.injectAt || 'head';
 
-        await injectCSS(config.id, cssFileName, injectionPoint);
+        if (!cssFileName && cssCode) {
+          cssFileName = `inline_${index}`;
+        }
+
+        if (cssFileName) {
+          await injectCSS(config.id, cssFileName, injectionPoint, cssCode);
+        }
       }
     }
 
