@@ -1,0 +1,14 @@
+{
+	"folders":
+	[
+		{
+			"path": ".",
+			"folder_exclude_patterns": [
+				"firefox-web-ext",
+			],
+		},
+		{
+			"path": "C:\\programs\\browser\\UserSiteContents"
+		},
+	],
+}

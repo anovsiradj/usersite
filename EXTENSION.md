@@ -1,9 +1,10 @@
 
 # compatibility
 
-the `manifest.json` file must be compatible with both google chrome and mozilla firefox.
-
-i was thinking about separating the manifest.json file into two files, one for google chrome and one for mozilla firefox, but i am not sure if it is the best way to do it.
+after some consideration with trial and error, 
+the manifest must be split into two versions:
+- `manifest.json` for Google Chrome  
+- `firefox-manifest.json` for Mozilla Firefox
 
 # google chrome references
 

@@ -1,4 +1,9 @@
-node_modules/
+/web/
+/node_modules/
+/firefox-web-ext/
+
+/*.sublime-workspace
+
 .DS_Store
 *.log
 *.zip
@@ -9,4 +14,3 @@ node_modules/
 .firefox*
 .chrome*
 
-/web/

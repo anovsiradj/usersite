@@ -18,7 +18,8 @@
 		"vendor.css": "deno bundle --platform browser --output web/vendor.css css/vendor.css",
 		"web-ext": "deno --allow-env --allow-sys --allow-read --allow-write web-ext",
 		"web-ext-help": "deno task web-ext --help",
-		"web-ext-lint": "deno task web-ext lint --self-hosted --ignore-files web examples"
+		"web-ext-lint": "deno task web-ext lint --self-hosted --ignore-files web examples",
+		"firefox-web-ext": "deno run --allow-read --allow-write firefox-web-ext.js"
 	},
 	"allowScripts": {
 		"allow": [
