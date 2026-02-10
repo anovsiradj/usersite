@@ -1,12 +1,8 @@
 // Background script for UserSite extension (simplified, no ES modules)
 // Manages extension state and handles file/config loading
 
-// Browser API compatibility (chrome/browser)
-// We mostly use 'chrome' namespace which is supported by both (callback-based in FF)
-// For userScripts, we use our adapter.
-const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-
 // Load shared libraries
+import './js/browser.js';
 import { ConfigManager } from './lib/config-manager.js';
 import { normalizeRunAt } from './lib/utils.js';
 import { CacheManager } from './lib/cache-manager.js';
@@ -46,15 +42,7 @@ async function unregisterScriptsForConfig(configId) {
 
 async function sendInjectToTab(tabId, config) {
   try {
-    await new Promise((resolve, reject) => {
-      browserAPI.tabs.sendMessage(tabId, { type: 'INJECT', config }, (response) => {
-        if (browserAPI.runtime.lastError) {
-          reject(new Error(browserAPI.runtime.lastError.message));
-        } else {
-          resolve(response);
-        }
-      });
-    });
+    await browser.tabs.sendMessage(tabId, { type: 'INJECT', config });
   } catch (_) {
     // If message fails, it usually means content script is not ready or tab is closing.
     // Since content.js is now a content script, we don't need manual injection fallback.
@@ -67,14 +55,9 @@ async function injectConfigIntoMatchingTabs(configId) {
   const config = configManager.getConfig(configId);
   const matches = config ? config.matches : null;
   if (!config || !config.enabled || !matches || (Array.isArray(matches) ? !matches.length : !matches)) return;
-  let tabs = [];
-  if (typeof browser !== 'undefined') {
-    tabs = await browser.tabs.query({ url: matches });
-  } else {
-    tabs = await new Promise((resolve) => {
-      chrome.tabs.query({ url: matches }, (t) => resolve(t || []));
-    });
-  }
+  
+  const tabs = await browser.tabs.query({ url: matches });
+
   for (const tab of tabs) {
     if (tab && tab.id) {
       try {
@@ -90,19 +73,19 @@ configManager.loadAllConfigs().catch(err => {
 });
 
 // Initialize extension
-browserAPI.runtime.onInstalled.addListener(async () => {
+browser.runtime.onInstalled.addListener(async () => {
   console.log('UserSite extension installed');
   await configManager.loadAllConfigs();
 });
 
 // Also load on startup (for when extension is already installed)
-browserAPI.runtime.onStartup.addListener(async () => {
+browser.runtime.onStartup.addListener(async () => {
   console.log('UserSite extension started');
   await configManager.loadAllConfigs();
 });
 
 // Handle messages from content scripts and dashboard
-browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_CONFIGS') {
     configManager.getAllConfigs()
       .then(configs => {
@@ -124,10 +107,10 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Notify tabs to cleanup
           const config = configManager.getConfig(message.configId);
           if (config && config.matches) {
-            browserAPI.tabs.query({ url: config.matches }, (tabs) => {
+            browser.tabs.query({ url: config.matches }, (tabs) => {
               for (const tab of tabs) {
                 if (tab.id) {
-                  browserAPI.tabs.sendMessage(tab.id, { type: 'CLEANUP', configId: message.configId });
+                  browser.tabs.sendMessage(tab.id, { type: 'CLEANUP', configId: message.configId });
                 }
               }
             });
@@ -230,7 +213,7 @@ browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: true, tabId: tabId });
     } else {
       // Fallback: try to get active tab
-      browserAPI.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs && tabs[0]) {
           sendResponse({ success: true, tabId: tabs[0].id });
         } else {
@@ -261,7 +244,7 @@ async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
       decodedJS = await cacheManager.getCachedContent(configId, jsFileName);
     } else {
       const storageKey = `usersite_files_${configId}`;
-      const result = await browserAPI.storage.local.get(storageKey);
+      const result = await browser.storage.local.get(storageKey);
       const files = result[storageKey] || {};
 
       if (!files[jsFileName]) {
@@ -331,7 +314,7 @@ async function injectJS(configId, jsFileName, jsCode, runAt, tabId) {
 }
 
 // Watch for tab updates to inject scripts/styles
-browserAPI.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
     try {
       const config = await configManager.getConfigForTab(tabId);

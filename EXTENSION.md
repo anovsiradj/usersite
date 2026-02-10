@@ -1,10 +1,11 @@
-
 # compatibility
 
 after some consideration with trial and error, 
 the manifest must be split into two versions:
 - `manifest.json` for Google Chrome  
 - `firefox-manifest.json` for Mozilla Firefox
+
+> **Note**: Beginning in Chrome 144, all Chrome Extension APIs are also available under the `browser` namespace.
 
 # google chrome references
 

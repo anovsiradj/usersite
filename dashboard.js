@@ -1,6 +1,6 @@
 // Dashboard script for UserSite extension
 import { FileWatcher } from './lib/file-watcher.js';
-import { escapeHtml, generateConfigId } from './lib/utils.js';
+import { generateConfigId } from './lib/utils.js';
 import { createHandleFromFiles } from './lib/fs-adapter.js';
 import {
   saveHandle,
@@ -146,10 +146,8 @@ $saveConfigBtn.on('click', async () => {
       }
     }
 
-    const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-
     // Save files to storage
-    await browserAPI.storage.local.set({
+    await browser.storage.local.set({
       [`usersite_files_${configId}`]: fileStorage
     });
 
@@ -160,17 +158,14 @@ $saveConfigBtn.on('click', async () => {
     configToSave.source = currentConfigData._fsFiles ? 'fs' : 'storage';
 
     // Save config
-    await new Promise((resolve, reject) => {
-      browserAPI.runtime.sendMessage({
-        type: 'ADD_CONFIG',
-        configId: configId,
-        config: configToSave
-      }, (response) => {
-        if (browserAPI.runtime.lastError) reject(new Error(browserAPI.runtime.lastError.message));
-        else if (response && response.success) resolve(response);
-        else reject(new Error('Failed to save configuration'));
-      });
+    const response = await browser.runtime.sendMessage({
+      type: 'ADD_CONFIG',
+      configId: configId,
+      config: configToSave
     });
+    if (!response || !response.success) {
+      throw new Error('Failed to save configuration');
+    }
 
     if (currentConfigData._fsHandle) {
       await saveHandle(configId, currentConfigData._fsHandle);
@@ -189,17 +184,8 @@ $saveConfigBtn.on('click', async () => {
   }
 });
 $reloadBtn.on('click', async () => {
-  const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
   try {
-    await new Promise((resolve, reject) => {
-      browserAPI.runtime.sendMessage({ type: 'RELOAD_CONFIGS' }, (response) => {
-        if (browserAPI.runtime.lastError) {
-          reject(new Error(browserAPI.runtime.lastError.message));
-        } else {
-          resolve(response);
-        }
-      });
-    });
+    await browser.runtime.sendMessage({ type: 'RELOAD_CONFIGS' });
     await loadConfigs();
   } catch (error) {
     console.error('Error reloading configs:', error);
@@ -225,16 +211,7 @@ async function loadConfigs() {
   $configList.html('<div class="loading">Loading configurations...</div>');
 
   try {
-    const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-    const response = await new Promise((resolve, reject) => {
-      browserAPI.runtime.sendMessage({ type: 'GET_CONFIGS' }, (response) => {
-        if (browserAPI.runtime.lastError) {
-          reject(new Error(browserAPI.runtime.lastError.message));
-        } else {
-          resolve(response);
-        }
-      });
-    });
+    const response = await browser.runtime.sendMessage({ type: 'GET_CONFIGS' });
 
     if (response && response.success && response.configs) {
       displayConfigs(response.configs);
@@ -404,8 +381,6 @@ async function viewSource(configId, fileName) {
   }
 
   try {
-    const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-
     // First try to see if it's an FS handle based config
     const handle = await getHandle(configId);
     if (handle) {
@@ -420,7 +395,7 @@ async function viewSource(configId, fileName) {
     }
 
     const storageKey = `usersite_files_${configId}`;
-    const result = await browserAPI.storage.local.get([storageKey]);
+    const result = await browser.storage.local.get([storageKey]);
     const files = result[storageKey];
 
     if (files && files[fileName]) {
@@ -446,22 +421,15 @@ async function viewSource(configId, fileName) {
 
 async function toggleConfig(configId, enabled) {
   try {
-    const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-    await new Promise((resolve, reject) => {
-      browserAPI.runtime.sendMessage({
-        type: 'TOGGLE_CONFIG',
-        configId: configId,
-        enabled: enabled
-      }, (response) => {
-        if (browserAPI.runtime.lastError) {
-          reject(new Error(browserAPI.runtime.lastError.message));
-        } else if (response && response.success) {
-          resolve(response);
-        } else {
-          reject(new Error('Failed to toggle configuration'));
-        }
-      });
+    const response = await browser.runtime.sendMessage({
+      type: 'TOGGLE_CONFIG',
+      configId: configId,
+      enabled: enabled
     });
+
+    if (!response || !response.success) {
+      throw new Error('Failed to toggle configuration');
+    }
 
     // Reload to reflect changes
     await loadConfigs();
@@ -473,24 +441,17 @@ async function toggleConfig(configId, enabled) {
 
 async function deleteConfig(configId) {
   try {
-    const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-    await new Promise((resolve, reject) => {
-      browserAPI.runtime.sendMessage({
-        type: 'DELETE_CONFIG',
-        configId: configId
-      }, (response) => {
-        if (browserAPI.runtime.lastError) {
-          reject(new Error(browserAPI.runtime.lastError.message));
-        } else if (response && response.success) {
-          resolve(response);
-        } else {
-          reject(new Error('Failed to delete configuration'));
-        }
-      });
+    const response = await browser.runtime.sendMessage({
+      type: 'DELETE_CONFIG',
+      configId: configId
     });
 
+    if (!response || !response.success) {
+      throw new Error('Failed to delete configuration');
+    }
+
     // Delete stored files
-    await browserAPI.storage.local.remove(`usersite_files_${configId}`);
+    await browser.storage.local.remove(`usersite_files_${configId}`);
     await deleteHandle(configId);
 
     // Reload list
@@ -546,16 +507,12 @@ async function requestFsPermissionsViaGesture() {
 
 async function updateFsBanner() {
   try {
-    const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-    const resp = await new Promise((resolve) => {
-      browserAPI.runtime.sendMessage({ type: 'GET_CONFIGS' }, (response) => {
-        if (browserAPI.runtime.lastError) {
-          resolve({ success: false, configs: [] });
-        } else {
-          resolve(response || { success: true, configs: [] });
-        }
-      });
-    });
+    let resp;
+    try {
+      resp = await browser.runtime.sendMessage({ type: 'GET_CONFIGS' });
+    } catch (e) {
+      resp = { success: false, configs: [] };
+    }
     const configs = (resp && resp.success && Array.isArray(resp.configs)) ? resp.configs : [];
     const fsConfigs = configs.filter(c => c && c.source === 'fs');
     let needs = false;
@@ -618,7 +575,6 @@ async function loadFromDirectoryHandle(dirHandle) {
 }
 
 async function rescanConfig(configId) {
-  const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
   try {
     const dirHandle = await getHandle(configId);
     if (!dirHandle) {
@@ -637,26 +593,21 @@ async function rescanConfig(configId) {
         fileStorage[f.name] = dataURL;
       }
     }
-    await browserAPI.storage.local.set({
+    await browser.storage.local.set({
       [`usersite_files_${configId}`]: fileStorage
     });
 
     const configToSave = { ...loaded.config, id: configId, source: 'fs' };
-    await new Promise((resolve, reject) => {
-      browserAPI.runtime.sendMessage({
-        type: 'ADD_CONFIG',
-        configId: configId,
-        config: configToSave
-      }, (response) => {
-        if (browserAPI.runtime.lastError) {
-          reject(new Error(browserAPI.runtime.lastError.message));
-        } else if (response && response.success) {
-          resolve(response);
-        } else {
-          reject(new Error('Failed to update configuration'));
-        }
-      });
+    const response = await browser.runtime.sendMessage({
+      type: 'ADD_CONFIG',
+      configId: configId,
+      config: configToSave
     });
+
+    if (!response || !response.success) {
+      throw new Error('Failed to update configuration');
+    }
+
     await loadConfigs();
 
     // Start downloading CDN assets and show progress

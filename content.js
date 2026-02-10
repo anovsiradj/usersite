@@ -4,21 +4,15 @@
 (function () {
   'use strict';
 
-  // Browser API compatibility (chrome/browser)
-  const browserAPI = chrome;
-
   // Store injected resources to prevent duplicates
   const injectedResources = new Map();
 
   // Message listener for injection requests
-  browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  browser.runtime.onMessage.addListener((message, sender) => {
     if (message.type === 'INJECT' && message.config) {
-      injectConfig(message.config, sender.tab?.id).then(() => {
-        sendResponse({ success: true });
-      }).catch((error) => {
-        sendResponse({ success: false, error: error.message });
-      });
-      return true; // Keep channel open for async response
+      return injectConfig(message.config, sender.tab?.id)
+        .then(() => ({ success: true }))
+        .catch((error) => ({ success: false, error: error.message }));
     }
 
     if (message.type === 'CLEANUP' && message.configId) {
@@ -30,10 +24,8 @@
           injectedResources.delete(key);
         }
       }
-      sendResponse({ success: true });
-      return false;
+      return Promise.resolve({ success: true });
     }
-    return false;
   });
 
   function isUrl(str) {
@@ -56,13 +48,11 @@
 
       if (!decodedCSS) {
         if (isUrl(cssFileName)) {
-          const response = await new Promise((resolve) => {
-            browserAPI.runtime.sendMessage({
+          const response = await browser.runtime.sendMessage({
               type: 'GET_CACHED_CONTENT',
               configId: configId,
               url: cssFileName
-            }, (response) => resolve(response));
-          });
+            });
           if (response && response.success && response.content) {
             decodedCSS = response.content;
           } else {
@@ -71,7 +61,7 @@
           }
         } else {
           const storageKey = `usersite_files_${configId}`;
-          const result = await browserAPI.storage.local.get(storageKey);
+          const result = await browser.storage.local.get(storageKey);
           const files = result[storageKey] || {};
 
           if (!files[cssFileName]) {
@@ -151,7 +141,7 @@
       // Request background script to inject the JS using scripting API
       // This bypasses CSP because it's injected by the extension API
       const response = await new Promise((resolve, reject) => {
-        browserAPI.runtime.sendMessage({
+        browser.runtime.sendMessage({
           type: 'INJECT_JS',
           configId: configId,
           jsFileName: jsFileName,
@@ -159,8 +149,8 @@
           runAt: runAt,
           tabId: tabId
         }, (response) => {
-          if (browserAPI.runtime.lastError) {
-            reject(new Error(browserAPI.runtime.lastError.message));
+          if (browser.runtime.lastError) {
+            reject(new Error(browser.runtime.lastError.message));
           } else {
             resolve(response);
           }
@@ -187,9 +177,9 @@
     // Content scripts can't access tabs API directly, so request from background
     if (!tabId) {
       tabId = await new Promise((resolve) => {
-        browserAPI.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
-          if (browserAPI.runtime.lastError) {
-            console.error('Error getting tab ID:', browserAPI.runtime.lastError);
+        browser.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
+          if (browser.runtime.lastError) {
+            console.error('Error getting tab ID:', browser.runtime.lastError);
             resolve(null);
           } else {
             resolve(response?.tabId || null);
@@ -245,8 +235,8 @@
     try {
       // Get tab ID first
       const tabIdResponse = await new Promise((resolve) => {
-        browserAPI.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
-          if (browserAPI.runtime.lastError) {
+        browser.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
+          if (browser.runtime.lastError) {
             resolve(null);
           } else {
             resolve(response);
@@ -258,11 +248,11 @@
 
       // Get config for current URL
       const configResponse = await new Promise((resolve) => {
-        browserAPI.runtime.sendMessage({
+        browser.runtime.sendMessage({
           type: 'GET_CONFIG',
           url: window.location.href
         }, (response) => {
-          if (browserAPI.runtime.lastError) {
+          if (browser.runtime.lastError) {
             resolve(null);
           } else {
             resolve(response);

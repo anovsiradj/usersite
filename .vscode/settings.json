@@ -1,0 +1,7 @@
+{
+	"files.exclude": {
+		"**/web/": true,
+		"**/node_modules/": true,
+		"**/firefox-web-ext/": true,
+	}
+}
