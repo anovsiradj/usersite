@@ -55,14 +55,14 @@ async function injectConfigIntoMatchingTabs(configId) {
   const config = configManager.getConfig(configId);
   const matches = config ? config.matches : null;
   if (!config || !config.enabled || !matches || (Array.isArray(matches) ? !matches.length : !matches)) return;
-  
+
   const tabs = await browser.tabs.query({ url: matches });
 
   for (const tab of tabs) {
     if (tab && tab.id) {
       try {
         await sendInjectToTab(tab.id, config);
-      } catch (_) { }
+      } catch (_) {}
     }
   }
 }
