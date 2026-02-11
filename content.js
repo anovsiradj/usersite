@@ -83,7 +83,6 @@
       }
 
       const styleEl = document.createElement('style');
-      styleEl.type = 'text/css';
       styleEl.setAttribute('data-usersite-config', String(configId));
       styleEl.setAttribute('data-usersite-css-file', String(cssFileName));
       styleEl.textContent = decodedCSS;
@@ -92,12 +91,14 @@
         if (document.head) {
           document.head.appendChild(styleEl);
         } else {
+          console.warn('Document head not available, appending to documentElement');
           document.documentElement.appendChild(styleEl);
         }
       } else if (injectionPoint === 'body_start') {
         if (document.body) {
           document.body.insertBefore(styleEl, document.body.firstChild);
         } else {
+          console.warn('Document body not available, waiting for DOMContentLoaded');
           const observer = new MutationObserver(() => {
             if (document.body) {
               document.body.insertBefore(styleEl, document.body.firstChild);
@@ -110,6 +111,7 @@
         if (document.body) {
           document.body.appendChild(styleEl);
         } else {
+          console.warn('Document body not available, waiting for DOMContentLoaded');
           const observer = new MutationObserver(() => {
             if (document.body) {
               document.body.appendChild(styleEl);
@@ -126,50 +128,7 @@
     }
   }
 
-  /**
-   * Inject JS file from storage
-   * Note: For CSP compliance, JS injection is handled by background script
-   * This function just requests the injection
-   */
-  async function injectJS(configId, jsFileName, runAt = 'document_idle', tabId, jsCode) {
-    const cacheKey = `js-${configId}-${jsFileName || 'inline'}`;
-    if (injectedResources.has(cacheKey)) {
-      return;
-    }
-
-    try {
-      // Request background script to inject the JS using scripting API
-      // This bypasses CSP because it's injected by the extension API
-      const response = await new Promise((resolve, reject) => {
-        browser.runtime.sendMessage({
-          type: 'INJECT_JS',
-          configId: configId,
-          jsFileName: jsFileName,
-          jsCode: jsCode,
-          runAt: runAt,
-          tabId: tabId
-        }, (response) => {
-          if (browser.runtime.lastError) {
-            reject(new Error(browser.runtime.lastError.message));
-          } else {
-            resolve(response);
-          }
-        });
-      });
-
-      if (response && response.success) {
-        injectedResources.set(cacheKey, true);
-      }
-    } catch (error) {
-      console.error(`Error injecting JS ${jsFileName}:`, error);
-    }
-  }
-
-
-
-  /**
-   * Inject all resources from config
-   */
+  // Inject all resources from config
   async function injectConfig(config, tabId) {
     if (!config || !config.enabled) return;
 
@@ -205,69 +164,47 @@
         }
       }
     }
-
-
-
-    // Inject JS files (via background script to bypass CSP)
-    if (config.js && Array.isArray(config.js) && tabId) {
-      for (const jsItem of config.js) {
-        const mergedItem = Object.assign({}, config.jsDefault || {}, typeof jsItem === 'object' ? jsItem : { file: jsItem });
-        const jsFileName = mergedItem.file;
-        const jsCode = mergedItem.code;
-        const runAt = mergedItem.runAt || 'document_idle';
-
-        await injectJS(config.id, jsFileName, runAt, tabId, jsCode);
-      }
-    }
   }
 
-  // Auto-inject on page load if config exists
-  // This is a fallback if background script injection didn't work
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      requestConfig();
-    });
-  } else {
-    requestConfig();
-  }
-
-  async function requestConfig() {
+  // Auto-initialize: Request matching configs from background on load
+  async function init() {
     try {
-      // Get tab ID first
-      const tabIdResponse = await new Promise((resolve) => {
-        browser.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
-          if (browser.runtime.lastError) {
-            resolve(null);
-          } else {
-            resolve(response);
+      const response = await browser.runtime.sendMessage({ type: 'GET_CONFIGS' });
+      if (response && response.success && Array.isArray(response.configs)) {
+        const currentUrl = window.location.href;
+        
+        // Match patterns helper (simplified glob-to-regex)
+        const matchesPattern = (url, pattern) => {
+          try {
+            const regex = new RegExp('^' + pattern.split('*').map(s => s.replace(/[.+^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
+            return regex.test(url);
+          } catch (e) {
+            return false;
           }
-        });
-      });
+        };
 
-      const tabId = tabIdResponse?.tabId || null;
-
-      // Get config for current URL
-      const configResponse = await new Promise((resolve) => {
-        browser.runtime.sendMessage({
-          type: 'GET_CONFIG',
-          url: window.location.href
-        }, (response) => {
-          if (browser.runtime.lastError) {
-            resolve(null);
-          } else {
-            resolve(response);
+        for (const config of response.configs) {
+          if (!config.enabled || !config.matches) continue;
+          
+          const patterns = Array.isArray(config.matches) ? config.matches : [config.matches];
+          const isMatch = patterns.some(pattern => matchesPattern(currentUrl, pattern));
+          
+          if (isMatch) {
+            console.log(`[UserSite] Auto-injecting config: ${config.id}`);
+            await injectConfig(config);
           }
-        });
-      });
-
-      if (configResponse && configResponse.success && configResponse.config) {
-        const config = configResponse.config;
-        if (config.matches) {
-          await injectConfig(config, tabId);
         }
       }
     } catch (error) {
-      console.error('Error in requestConfig:', error);
+      console.error('[UserSite] Initialization error:', error);
     }
   }
+
+  // Run initialization
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
 })();

@@ -1,8 +1,8 @@
 /* Example CSS file for UserSite extension */
 /* This CSS will be injected into matching websites */
 
-body {
-  background-color: darkblue !important;
+html, body {
+  background-color: black !important;
   color: orangered;
 }
 

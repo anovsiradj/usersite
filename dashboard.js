@@ -1,6 +1,5 @@
 // Dashboard script for UserSite extension
 import { FileWatcher } from './lib/file-watcher.js';
-import { generateConfigId } from './lib/utils.js';
 import { createHandleFromFiles } from './lib/fs-adapter.js';
 import {
   saveHandle,
@@ -65,12 +64,14 @@ $pickDirBtn.on('click', async () => {
     const dirHandle = await window.showDirectoryPicker();
     const loaded = await loadFromDirectoryHandle(dirHandle);
     if (loaded) {
+      console.log('Successfully loaded config from folder:', loaded.config.name);
       currentConfigData = loaded.config;
       currentConfigData._fsHandle = dirHandle;
       currentConfigData._fsFiles = loaded.files;
       displayConfigPreview(currentConfigData);
       $saveConfigBtn.prop('disabled', false);
     } else {
+      console.warn('Folder selection failed validation: no config.json or other error');
       showAlert('No valid config.json found in selected folder', 'Warning');
       $saveConfigBtn.prop('disabled', true);
     }
@@ -102,6 +103,7 @@ $configFolderInput.on('change', async (e) => {
     const loaded = await loadFromDirectoryHandle(dirHandle);
 
     if (loaded) {
+      console.log('Successfully loaded config from virtual folder:', loaded.config.name);
       currentConfigData = loaded.config;
       // Store the virtual handle (saveHandle specific logic will skip persisting it)
       currentConfigData._fsHandle = dirHandle;
@@ -112,6 +114,7 @@ $configFolderInput.on('change', async (e) => {
       // Update UI to show this is non-persistent
       // Maybe show a hint via alert or console?
     } else {
+      console.warn('Virtual folder selection failed validation: no config.json or other error');
       showAlert('No valid config.json found in selected folder', 'Warning');
       $saveConfigBtn.prop('disabled', true);
     }
@@ -127,7 +130,7 @@ $saveConfigBtn.on('click', async () => {
   if (!currentConfigData) return;
 
   try {
-    const configId = generateConfigId(currentConfigData.name);
+    const configId = makeIden(currentConfigData.name);
     const fileStorage = {};
 
     if (currentConfigData._fsFiles && currentConfigData._fsFiles.length) {
@@ -164,7 +167,8 @@ $saveConfigBtn.on('click', async () => {
       config: configToSave
     });
     if (!response || !response.success) {
-      throw new Error('Failed to save configuration');
+      const errorMsg = response && response.error ? response.error : 'Failed to save configuration';
+      throw new Error(errorMsg);
     }
 
     if (currentConfigData._fsHandle) {
@@ -567,9 +571,13 @@ async function loadFromDirectoryHandle(dirHandle) {
         }
       }
     }
-    if (!config) return null;
+    if (!config) {
+      console.warn('No config.json found in handle:', dirHandle.name);
+      return null;
+    }
     return { config, files };
   } catch (e) {
+    console.error('Error loading from directory handle:', e);
     return null;
   }
 }

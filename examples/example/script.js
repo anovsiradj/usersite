@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  console.log('UserSite: Example script loaded!');
+  console.debug('UserSite: Example script loaded!', 4);
 
   // Example: Add a custom banner
   const banner = document.createElement('div');
@@ -25,7 +25,6 @@
 
   // Example: Log all links
   const links = document.querySelectorAll('a');
-  console.log(`UserSite: Found ${links.length} links on this page`);
-  console.log('UserSiteExample: file;');
-
+  console.debug(`UserSite: Found ${links.length} links on this page`);
+  console.debug('UserSiteExample: file;');
 })();
