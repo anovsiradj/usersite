@@ -7,6 +7,9 @@ the manifest must be split into two versions:
 
 > **Note**: Beginning in Chrome 144, all Chrome Extension APIs are also available under the `browser` namespace.
 
+- **Firefox**: 109.0 or later (Manifest V3)
+- **Chrome (including its variants)**: 88 or later (Manifest V3)
+
 # google chrome references
 
 (manifest.json) https://developer.chrome.com/docs/extensions/reference/manifest

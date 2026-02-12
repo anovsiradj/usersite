@@ -1,6 +1,6 @@
 # UserSite
 
-A browser extension that injects custom JS and CSS files into websites, with optional jQuery injection, similar to user script and user style extensions, but supporting all in one unified tool.
+A browser extension that injects custom JS and CSS files into websites, similar to userscript and userstyle, but supporting both.
 
 ## Features
 
@@ -27,52 +27,6 @@ A browser extension that injects custom JS and CSS files into websites, with opt
 4. Click "Load unpacked"
 5. Select the project directory
 
-## Usage
-
-### Creating a Configuration
-
-1. Create a folder for your configuration
-2. Inside the folder, create a `config.json` file
-3. Add your JS (`.js`) and/or CSS (`.css`) files to the same folder
-
-### config.json format
-
-see `./examples/example/config.json` for complete example.
-
-#### Configuration Fields
-
-- **name** (required): Name of your configuration
-- **description** (optional): Description of what this configuration does
-- **matches** (required): Array of URL match patterns. Supports wildcards:
-  - `*` matches any characters
-  - `?` matches a single character
-  - Examples: `*://example.com/*`, `https://*.example.com/*`
-- **css** (optional): Array of CSS files to inject
-  - Can be a string (file name) or an object with:
-    - `file`: File name
-    - `injectAt`: Where to inject (`head`, `body_start`, `body_end`)
-- **js** (optional): Array of JS files to inject
-  - Can be a string (file name) or an object with:
-    - `file`: File name
-    - `code`: Inline JavaScript code to execute
-    - `runAt`: When to run (`document_start`, `document_end`, `document_idle`)
-    - `world`: Execution world (`MAIN` or `ISOLATED`, default: `MAIN`)
-- **cssDefault** (optional): Object with default values for all CSS items (e.g., `{"injectAt": "body_end"}`)
-- **jsDefault** (optional): Object with default values for all JS items (e.g., `{"runAt": "document_start", "world": "MAIN"}`)
-- **enabled** (optional): Whether this configuration is enabled (default: `true`)
-
-#### CSS Injection Points
-
-- **head**: Injects into the `<head>` tag
-- **body_start**: Injects at the start of `<body>` tag
-- **body_end**: Injects at the end of `<body>` tag (before closing tag)
-
-#### JS Run At Options
-
-- **document_start**: Run as soon as possible
-- **document_end**: Run after DOM is ready
-- **document_idle**: Run after page is fully loaded (default)
-
 ### Adding a Configuration
 
 1. Click the UserSite extension icon in your browser toolbar
@@ -85,11 +39,6 @@ see `./examples/example/config.json` for complete example.
 - **Enable/Disable**: Use the toggle switch on each configuration card
 - **Delete**: Click the "Delete" button (this action cannot be undone)
 - **Reload**: Click "Reload Configs" to refresh the configuration list
-
-## Browser Compatibility
-
-- **Firefox**: 109.0 or later (Manifest V3)
-- **Chrome (including its variants)**: 88 or later (Manifest V3)
 
 ## development
 

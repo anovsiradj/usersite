@@ -10,6 +10,5 @@
 *.xpi
 .idea/
 
-.firefox*
-.chrome*
-
+/web/vendor.js
+/web/vendor.css

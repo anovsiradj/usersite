@@ -1,5 +1,3 @@
-// Background script for UserSite extension (simplified, no ES modules)
-// Manages extension state and handles file/config loading
 
 // Load shared libraries
 import './js/helper.js';
@@ -11,7 +9,6 @@ import { UserScripts } from './lib/api-adapter.js';
 const configManager = new ConfigManager();
 const cacheManager = new CacheManager();
 const userScriptsRegistry = new Map();
-const pendingRegistrations = new Set();
 
 async function unregisterScriptsForConfig(configId) {
 	// 1. Clear in-memory tracking
@@ -40,7 +37,7 @@ async function unregisterScriptsForConfig(configId) {
 		const config = configManager.getConfig(configId);
 		const ids = [];
 		if (config && config.js) {
-			config.js.forEach(item => ids.push(makeItemIden(configId, item)));
+			config.js.forEach(item => ids.push(sourceToId(config, item)));
 		}
 		if (ids.length > 0) {
 			await UserScripts.unregister(ids);
@@ -58,22 +55,38 @@ async function registerScriptsForConfig(configId) {
 	const fileStorage = storageResult[storageKey] || {};
 
 	const scriptsToRegister = [];
-	config.js.forEach((item, index) => {
+	for (let index = 0; index < config.js.length; index++) {
+		const item = config.js[index];
 		const scriptKey = `${configId}:${index}`;
-		const scriptId = makeItemIden(configId, item);
+		const scriptId = sourceToId(config, item);
 
 		let jsConfig = [];
 		if (item.file) {
-			// If it's a file, try to get code from local storage
-			const code = fileStorage[item.file];
-			if (code) {
-				// DataURL to code
-				const base64 = code.split(',')[1];
-				jsConfig = [{ code: atob(base64) }];
+			if (isFileHttp(item.file)) {
+				// Try to get from cache manager
+				try {
+					await cacheManager.init();
+					const content = await cacheManager.getCachedContent(configId, item.file);
+					if (content) {
+						jsConfig = [{ code: content }];
+					} else {
+						console.warn(`Remote script ${item.file} not found in cache for config ${configId}`);
+						continue;
+					}
+				} catch (e) {
+					console.error(`Error getting cached script ${item.file}:`, e);
+					continue;
+				}
 			} else {
-				// Fallback or warning if file not found in storage
-				console.warn(`File ${item.file} not found in storage for config ${configId}`);
-				return; // Skip this script
+				// Local file from storage
+				const code = fileStorage[item.file];
+				if (code) {
+					const base64 = code.split(',')[1];
+					jsConfig = [{ code: atob(base64) }];
+				} else {
+					console.warn(`File ${item.file} not found in storage for config ${configId}`);
+					continue;
+				}
 			}
 		} else if (item.code) {
 			jsConfig = [{ code: item.code }];
@@ -90,7 +103,7 @@ async function registerScriptsForConfig(configId) {
 
 			userScriptsRegistry.set(scriptKey, scriptId);
 		}
-	});
+	}
 
 	if (scriptsToRegister.length > 0) {
 		try {
@@ -123,7 +136,7 @@ async function injectConfigIntoMatchingTabs(configId) {
 		if (tab && tab.id) {
 			try {
 				await sendInjectToTab(tab.id, config);
-			} catch (_) { }
+			} catch (_) {}
 		}
 	}
 }
@@ -164,6 +177,11 @@ browser.runtime.onStartup.addListener(async () => {
 	}
 });
 
+// Open dashboard (options page) when the extension icon is clicked
+browser.action.onClicked.addListener(() => {
+	browser.runtime.openOptionsPage();
+});
+
 // Handle messages from content scripts and dashboard
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	if (message.type === 'GET_CONFIGS') {
@@ -192,7 +210,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 						const tabs = await browser.tabs.query({ url: config.matches });
 						for (const tab of tabs) {
 							if (tab.id) {
-								browser.tabs.sendMessage(tab.id, { type: 'CLEANUP', configId: message.configId }).catch(() => { });
+								browser.tabs.sendMessage(tab.id, { type: 'CLEANUP', configId: message.configId }).catch(() => {});
 							}
 						}
 					}
@@ -223,7 +241,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 					const tabs = await browser.tabs.query({ url: config.matches });
 					for (const tab of tabs) {
 						if (tab.id) {
-							browser.tabs.sendMessage(tab.id, { type: 'CLEANUP', configId: message.configId }).catch(() => { });
+							browser.tabs.sendMessage(tab.id, { type: 'CLEANUP', configId: message.configId }).catch(() => {});
 						}
 					}
 				}

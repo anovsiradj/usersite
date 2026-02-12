@@ -1,23 +1,21 @@
-/* 
+/**
  * @link https://extensionworkshop.com/documentation/develop/browser-compatibility/
  */
 
-if (globalThis.chrome) {
-    globalThis.isChrome ??= true;
-}
+globalThis.isChrome = typeof globalThis.chrome !== 'undefined';
+globalThis.isFirefox = !globalThis.isChrome;
 
-globalThis.browser ??= chrome;
-globalThis.chrome ??= browser;
+globalThis.browser ??= globalThis.chrome;
 
-globalThis.isFirefox ??= !globalThis.isChrome;
+console.debug('[isChrome]', isChrome, '[isFirefox]', isFirefox)
 
-// Polyfill for browser.runtime.getBrowserInfo() if not available (e.g., in Chrome)
 if (browser && browser.runtime && !browser.runtime.getBrowserInfo) {
+    console.info('polyfill for chrome: browser.runtime.getBrowserInfo()')
+
     browser.runtime.getBrowserInfo = async function () {
         let name = null;
         let version = null;
 
-        // Try modern User-Agent Client Hints API first
         let infos = navigator?.userAgentData?.brands || [];
         if (Array.isArray(infos)) {
             let info = infos[infos.length - 1];

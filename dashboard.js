@@ -21,7 +21,6 @@ import { CacheManager } from './lib/cache-manager.js';
 
 const fileWatcher = new FileWatcher();
 const cacheManager = new CacheManager();
-let currentConfigFiles = null;
 let currentConfigData = null;
 
 // DOM Elements (jQuery)
@@ -130,7 +129,7 @@ $saveConfigBtn.on('click', async () => {
   if (!currentConfigData) return;
 
   try {
-    const configId = makeIden(currentConfigData.name);
+    const configId = toId(currentConfigData.name);
     const fileStorage = {};
 
     if (currentConfigData._fsFiles && currentConfigData._fsFiles.length) {
@@ -320,8 +319,7 @@ function createConfigCard(config) {
     items.forEach((item, index) => {
       const name = typeof item === 'string' ? item : (item.file || null);
       if (name) {
-        const isUrl = cacheManager.isUrl(name);
-        files.push({ name, type, index, isUrl });
+        files.push({ name, type, index, isUrl: isFileHttp(name) });
       } else if (item.code) {
         files.push({ name: `Inline ${type === 'js' ? 'Script' : 'Style'}`, type, index, isInline: true, code: item.code });
       }
@@ -642,7 +640,7 @@ async function downloadCdnAssets(configId, config) {
     if (!Array.isArray(items)) return;
     items.forEach(item => {
       const url = typeof item === 'string' ? item : item.file;
-      if (url && cacheManager.isUrl(url)) cdnAssets.push(url);
+      if (url && isFileHttp(url)) cdnAssets.push(url);
     });
   };
   collect(config.js);

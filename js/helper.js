@@ -1,20 +1,28 @@
 
-globalThis.makeIden = function(iden) {
-    iden = iden.replace(/[^a-zA-Z0-9_]/g, '_')
-    iden = iden.replace(/_{2,}/g, '_')
-    iden = iden.replace(/^_/, '').replace(/_$/, '');
-    return iden;
+globalThis.toId = function (id) {
+    id = id.replace(/[^a-zA-Z0-9_]/g, '_')
+    id = id.replace(/_{2,}/g, '_')
+    id = id.replace(/^_/, '')
+    id = id.replace(/_$/, '')
+    return id;
 }
 
-globalThis.makeItemIden = function(configName, item) {
-    let name = item.file || btoa(item.code);
-    let iden = `usersite_${configName}_${name}`;
-    iden = makeIden(iden);
-    return iden;
+globalThis.configToId = function (config) {
+    let id = toId(`config_${config.name}`)
+    return id
 };
 
-globalThis.makeConfigIden = function(configName) {
-    let iden = `usersite_${configName}`;
-    iden = makeIden(iden);
-    return iden;
+globalThis.sourceToId = function (config, item) {
+    let id;
+    id = item.file || btoa(item.code).substring(0, 64)
+    id = `${configToId(config)}_item_${id}`;
+    id = toId(id);
+    return id;
 };
+
+globalThis.isFileHttp = function (file) {
+    if (file.startsWith('http:') || file.startsWith('https:')) {
+        return true
+    }
+    return false
+}

@@ -8,7 +8,17 @@
 			],
 		},
 		{
-			"path": "C:\\programs\\browser\\UserSiteContents"
+			"path": "C:\\programs\\browser\\UserSiteContents",
 		},
 	],
+	"settings":
+	{
+		"LSP":
+		{
+			"LSP-html":
+			{
+				"enabled": true
+			}
+		}
+	},
 }

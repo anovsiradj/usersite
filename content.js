@@ -28,15 +28,6 @@
     }
   });
 
-  function isUrl(str) {
-    try {
-      const url = new URL(str);
-      return url.protocol === 'http:' || url.protocol === 'https:';
-    } catch (e) {
-      return false;
-    }
-  }
-
   async function injectCSS(configId, cssFileName, injectionPoint = 'head', cssCode = null) {
     const cacheKey = `css-${configId}-${cssFileName}`;
     if (injectedResources.has(cacheKey)) {
@@ -47,7 +38,7 @@
       let decodedCSS = cssCode || '';
 
       if (!decodedCSS) {
-        if (isUrl(cssFileName)) {
+        if (isFileHttp(cssFileName)) {
           const response = await browser.runtime.sendMessage({
               type: 'GET_CACHED_CONTENT',
               configId: configId,

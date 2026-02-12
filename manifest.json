@@ -19,6 +19,7 @@
         "<all_urls>"
       ],
       "js": [
+        "js/helper.js",
         "js/browser.js",
         "content.js"
       ],
@@ -30,7 +31,6 @@
     "type": "module"
   },
   "action": {
-    "default_popup": "dashboard.html",
     "default_title": "UserSite Dashboard",
     "default_icon": {
       "16": "icons/icon-16.png",
