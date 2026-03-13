@@ -21,6 +21,7 @@ import { CacheManager } from './lib/cache-manager.js';
 
 const fileWatcher = new FileWatcher();
 const cacheManager = new CacheManager();
+let currentConfigFiles = null;
 let currentConfigData = null;
 
 // DOM Elements (jQuery)

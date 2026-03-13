@@ -9,7 +9,7 @@ globalThis.browser ??= globalThis.chrome;
 
 console.debug('[isChrome]', isChrome, '[isFirefox]', isFirefox)
 
-if (browser && browser.runtime && !browser.runtime.getBrowserInfo) {
+if (typeof browser.runtime.getBrowserInfo === 'undefined') {
     console.info('polyfill for chrome: browser.runtime.getBrowserInfo()')
 
     browser.runtime.getBrowserInfo = async function () {

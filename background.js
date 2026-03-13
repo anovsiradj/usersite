@@ -2,6 +2,8 @@
 // Load shared libraries
 import './js/helper.js';
 import './js/browser.js';
+import './js/wrapper.js';
+
 import { ConfigManager } from './lib/config-manager.js';
 import { CacheManager } from './lib/cache-manager.js';
 import { UserScripts } from './lib/api-adapter.js';
@@ -23,7 +25,7 @@ async function unregisterScriptsForConfig(configId) {
 	// We query the engine for all scripts and filter by our predictable prefix
 	const prefix = `usersite_${configId}_`.replace(/[^a-zA-Z0-9_]/g, '_');
 
-	if (isChrome && browser.userScripts && browser.userScripts.getScripts) {
+	if (browser.userScripts.getScripts) {
 		const scripts = await browser.userScripts.getScripts();
 		const idsToUnregister = scripts
 			.map(s => s.id)
@@ -31,16 +33,6 @@ async function unregisterScriptsForConfig(configId) {
 
 		if (idsToUnregister.length > 0) {
 			await browser.userScripts.unregister({ ids: idsToUnregister });
-		}
-	} else if (typeof UserScripts !== 'undefined' && UserScripts.unregister) {
-		// Fallback to adapter for Firefox or other cases
-		const config = configManager.getConfig(configId);
-		const ids = [];
-		if (config && config.js) {
-			config.js.forEach(item => ids.push(sourceToId(config, item)));
-		}
-		if (ids.length > 0) {
-			await UserScripts.unregister(ids);
 		}
 	}
 }
@@ -156,6 +148,8 @@ configManager.loadAllConfigs().then(async () => {
 // Initialize extension
 browser.runtime.onInstalled.addListener(async () => {
 	console.log('UserSite extension installed');
+	console.debug(globalThis)
+
 	await configManager.loadAllConfigs();
 	const configs = await configManager.getAllConfigs();
 	for (const config of configs) {

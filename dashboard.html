@@ -166,7 +166,16 @@
     </div>
   </template>
 
+  <template id="alertTemplate">
+    <div class="alert alert-primary alert-dismissible fade show d-flex align-items-center gap-2" role="alert">
+      <span class="alert-icon"></span>
+      <span class="alert-message flex-grow-1"></span>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  </template>
+
   <script src="js/helper.js"></script>
+  <script src="js/widget.js"></script>
   <script src="js/browser.js"></script>
   <script src="web/vendor.js"></script>
   <script type="module" src="dashboard.js"></script>
