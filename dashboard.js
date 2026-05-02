@@ -475,6 +475,7 @@ $(async function () {
   }
   loadConfigs();
   updateFsBanner();
+  loadLogs();
 });
 
 
@@ -556,6 +557,42 @@ async function updateFsBanner() {
 }
 
 
+
+async function loadLogs() {
+  try {
+    const response = await browser.runtime.sendMessage({ type: 'GET_LOGS' });
+    if (response && response.success && Array.isArray(response.logs)) {
+      renderLogs(response.logs);
+    }
+  } catch (error) {
+    console.error('Error loading logs:', error);
+  }
+}
+
+function renderLogs(logs) {
+  const $logList = $('#logList');
+  $logList.empty();
+  if (!logs || logs.length === 0) {
+    $logList.append('<li class="text-muted" style="font-size: 0.75rem;">No logs yet.</li>');
+    return;
+  }
+  logs.forEach(entry => {
+    const time = new Date(entry.timestamp).toLocaleTimeString();
+    const levelClass = entry.level === 'error' ? 'text-danger' : entry.level === 'warn' ? 'text-warning' : 'text-muted';
+    const dataStr = entry.data ? ` — ${entry.data instanceof Error ? entry.data.message : JSON.stringify(entry.data)}` : '';
+    const $li = $(`<li class="${levelClass}" style="font-size: 0.75rem;">[${time}] [${entry.level.toUpperCase()}] ${entry.message}${dataStr}</li>`);
+    $logList.append($li);
+  });
+}
+
+$('#clearLogsBtn').on('click', async () => {
+  try {
+    await browser.runtime.sendMessage({ type: 'CLEAR_LOGS' });
+    $('#logList').empty().append('<li class="text-muted" style="font-size: 0.75rem;">No logs yet.</li>');
+  } catch (error) {
+    console.error('Error clearing logs:', error);
+  }
+});
 
 async function loadFromDirectoryHandle(dirHandle) {
   const files = [];

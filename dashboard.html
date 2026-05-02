@@ -48,6 +48,14 @@
       </div>
     </div>
 
+    <div id="logPanel" class="mt-4">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0 text-secondary small fw-bold">Extension Logs</h6>
+        <button id="clearLogsBtn" class="btn btn-outline-secondary btn-sm py-0">Clear Logs</button>
+      </div>
+      <ul id="logList" class="list-unstyled small border rounded p-2 bg-body-tertiary mb-0" style="max-height: 200px; overflow-y: auto; font-family: monospace;"></ul>
+    </div>
+
     <!-- Source Viewer Modal -->
     <div id="sourceViewerModal" class="modal fade" tabindex="-1" aria-labelledby="sourceViewerModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-xl modal-dialog-scrollable">

@@ -4,6 +4,15 @@
 (function () {
   'use strict';
 
+  // === CSS Injection Path (injectCSSResources) ===
+  // Receives INJECT message from background.js → injectConfig() → injectCSS()
+  // Creates <style data-usersite-config="{configId}" data-usersite-css-file="{file}"> in DOM
+  // Cleanup: CLEANUP message → removes all [data-usersite-config="{configId}"] elements
+  //
+  // JS Injection Path (registerJSResources) — managed in background.js
+  // background.js registers scripts via browser.userScripts API (document_start, MAIN world)
+  // content.js does NOT handle JS injection directly
+
   // Store injected resources to prevent duplicates
   const injectedResources = new Map();
 
@@ -157,10 +166,27 @@
     }
   }
 
+  // Retry helper for sendMessage with exponential backoff
+  // attempt 1: immediate, attempt 2: wait 200ms, attempt 3: wait 400ms
+  async function sendWithRetry(message, maxAttempts = 3, baseDelayMs = 200) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await browser.runtime.sendMessage(message);
+      } catch (error) {
+        if (attempt < maxAttempts) {
+          const delay = baseDelayMs * Math.pow(2, attempt - 1);
+          await new Promise(r => setTimeout(r, delay));
+        } else {
+          throw error;
+        }
+      }
+    }
+  }
+
   // Auto-initialize: Request matching configs from background on load
   async function init() {
     try {
-      const response = await browser.runtime.sendMessage({ type: 'GET_CONFIGS' });
+      const response = await sendWithRetry({ type: 'GET_CONFIGS' });
       if (response && response.success && Array.isArray(response.configs)) {
         const currentUrl = window.location.href;
         
@@ -187,7 +213,7 @@
         }
       }
     } catch (error) {
-      console.error('[UserSite] Initialization error:', error);
+      console.error('[UserSite] Initialization error after retries:', error);
     }
   }
 

@@ -7,6 +7,27 @@ import './js/wrapper.js';
 import { ConfigManager } from './lib/config-manager.js';
 import { CacheManager } from './lib/cache-manager.js';
 import { UserScripts } from './lib/api-adapter.js';
+import { logger } from './lib/logger.js';
+
+// === Injection Path Overview ===
+//
+// JS Path (registerJSResources):
+//   registerScriptsForConfig(configId)
+//     → browser.userScripts.register()
+//     → scripts run at document_start in MAIN world
+//   Cleanup: unregisterScriptsForConfig(configId)
+//     → browser.userScripts.unregister()
+//   Triggered on: ADD_CONFIG, TOGGLE_ON, RELOAD_CONFIGS, onInstalled, onStartup
+//   Cleaned up on: TOGGLE_OFF, DELETE_CONFIG, RELOAD_CONFIGS (before re-register)
+//
+// CSS Path (injectCSSResources):
+//   injectConfigIntoMatchingTabs(configId)
+//     → browser.tabs.sendMessage({ type: 'INJECT', config })
+//     → content.js injectCSS() → DOM <style data-usersite-config="...">
+//   Cleanup: browser.tabs.sendMessage({ type: 'CLEANUP', configId })
+//     → content.js removes [data-usersite-config=configId] elements
+//   Triggered on: ADD_CONFIG, TOGGLE_ON, RELOAD_CONFIGS
+//   Cleaned up on: TOGGLE_OFF, DELETE_CONFIG
 
 const configManager = new ConfigManager();
 const cacheManager = new CacheManager();
@@ -38,6 +59,9 @@ async function unregisterScriptsForConfig(configId) {
 }
 
 async function registerScriptsForConfig(configId) {
+	// Always unregister first to prevent duplicate scripts after SW restart
+	await unregisterScriptsForConfig(configId);
+
 	const config = configManager.getConfig(configId);
 	if (!config || !config.enabled || !config.js || !Array.isArray(config.js)) return;
 
@@ -66,7 +90,7 @@ async function registerScriptsForConfig(configId) {
 						continue;
 					}
 				} catch (e) {
-					console.error(`Error getting cached script ${item.file}:`, e);
+					logger.error(`Error getting cached script ${item.file}:`, e);
 					continue;
 				}
 			} else {
@@ -101,11 +125,12 @@ async function registerScriptsForConfig(configId) {
 		try {
 			await UserScripts.register(scriptsToRegister);
 		} catch (e) {
-			console.error(`Failed to register scripts for ${configId}:`, e);
+			logger.error(`Failed to register scripts for ${configId}:`, e);
 		}
 	}
 }
 
+// CSS injection only — JS is handled by userScripts API (see registerScriptsForConfig)
 async function sendInjectToTab(tabId, config) {
 	try {
 		await browser.tabs.sendMessage(tabId, { type: 'INJECT', config });
@@ -142,7 +167,7 @@ configManager.loadAllConfigs().then(async () => {
 		}
 	}
 }).catch(err => {
-	console.error('Error loading configs on startup:', err);
+	logger.error('Error loading configs on startup:', err);
 });
 
 // Initialize extension
@@ -184,7 +209,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 				sendResponse({ success: true, configs });
 			})
 			.catch(error => {
-				console.error('Error getting configs:', error);
+				logger.error('Error getting configs:', error);
 				sendResponse({ success: false, error: error.message });
 			});
 		return true;
@@ -195,6 +220,10 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 			try {
 				await configManager.toggleConfig(message.configId, message.enabled);
 				if (message.enabled === false) {
+					// JS cleanup: unregisterScriptsForConfig handles userScripts API
+					// CSS cleanup: CLEANUP message removes <style> elements in content.js
+					// Cleanup parity confirmed: both JS and CSS paths are cleaned up on TOGGLE_OFF
+
 					// 1. Unregister from Chrome/FF engine
 					await unregisterScriptsForConfig(message.configId);
 
@@ -214,7 +243,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 				}
 				sendResponse({ success: true });
 			} catch (error) {
-				console.error('Error toggling config:', error);
+				logger.error('Error toggling config:', error);
 				sendResponse({ success: false, error: error.message });
 			}
 		})();
@@ -224,6 +253,10 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	if (message.type === 'DELETE_CONFIG') {
 		(async () => {
 			try {
+				// JS cleanup: unregisterScriptsForConfig handles userScripts API
+				// CSS cleanup: CLEANUP message removes <style> elements in content.js
+				// Cleanup parity confirmed: both JS and CSS paths are cleaned up on DELETE_CONFIG
+
 				// 1. Get the config before deleting it so we know its matches for cleanup
 				const config = configManager.getConfig(message.configId);
 
@@ -244,7 +277,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 				await configManager.deleteConfig(message.configId);
 				sendResponse({ success: true });
 			} catch (error) {
-				console.error('Error deleting config:', error);
+				logger.error('Error deleting config:', error);
 				sendResponse({ success: false, error: error.message });
 			}
 		})();
@@ -264,7 +297,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 				await injectConfigIntoMatchingTabs(message.configId);
 				sendResponse({ success: true });
 			} catch (error) {
-				console.error('Error in ADD_CONFIG:', error);
+				logger.error('Error in ADD_CONFIG:', error);
 				sendResponse({ success: false, error: error.message || String(error) });
 			}
 		})();
@@ -275,9 +308,15 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		(async () => {
 			try {
 				await configManager.loadAllConfigs();
-				const ids = Array.from(userScriptsRegistry.values());
-				if (ids.length) {
-					await UserScripts.unregister(ids);
+				// JS cleanup: Query engine directly instead of relying on in-memory registry (which is lost on SW restart)
+				// CSS re-inject: injectConfigIntoMatchingTabs re-injects CSS into matching tabs after reload
+				// Cleanup parity confirmed: JS engine scripts are unregistered and CSS is re-injected on RELOAD_CONFIGS
+				if (browser.userScripts && browser.userScripts.getScripts) {
+					const allScripts = await browser.userScripts.getScripts();
+					const usersiteIds = allScripts.map(s => s.id).filter(id => id.startsWith('usersite_'));
+					if (usersiteIds.length > 0) {
+						await browser.userScripts.unregister({ ids: usersiteIds });
+					}
 				}
 				userScriptsRegistry.clear();
 				const configs = await configManager.getAllConfigs();
@@ -289,7 +328,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 				}
 				sendResponse({ success: true });
 			} catch (error) {
-				console.error('Error reloading configs:', error);
+				logger.error('Error reloading configs:', error);
 				sendResponse({ success: false, error: error.message });
 			}
 		})();
@@ -317,6 +356,17 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		cacheManager.init().then(() => cacheManager.getCachedContent(message.configId, message.url))
 			.then(content => sendResponse({ success: true, content }))
 			.catch(err => sendResponse({ success: false, error: err.message }));
+		return true;
+	}
+
+	if (message.type === 'GET_LOGS') {
+		sendResponse({ success: true, logs: logger.getLogs() });
+		return true;
+	}
+
+	if (message.type === 'CLEAR_LOGS') {
+		logger.clearLogs();
+		sendResponse({ success: true });
 		return true;
 	}
 });
