@@ -1,8 +1,6 @@
-
 // Load shared libraries
 import './js/helper.js';
 import './js/browser.js';
-import './js/wrapper.js';
 
 import { ConfigManager } from './lib/config-manager.js';
 import { CacheManager } from './lib/cache-manager.js';
@@ -17,7 +15,7 @@ import { logger } from './lib/logger.js';
 //     → scripts run at document_start in MAIN world
 //   Cleanup: unregisterScriptsForConfig(configId)
 //     → browser.userScripts.unregister()
-//   Triggered on: ADD_CONFIG, TOGGLE_ON, RELOAD_CONFIGS, onInstalled, onStartup
+//   Triggered on: ADD_CONFIG, TOGGLE_ON, RELOAD_CONFIGS, onInstalled, module startup
 //   Cleaned up on: TOGGLE_OFF, DELETE_CONFIG, RELOAD_CONFIGS (before re-register)
 //
 // CSS Path (injectCSSResources):
@@ -31,19 +29,10 @@ import { logger } from './lib/logger.js';
 
 const configManager = new ConfigManager();
 const cacheManager = new CacheManager();
-const userScriptsRegistry = new Map();
 
 async function unregisterScriptsForConfig(configId) {
-	// 1. Clear in-memory tracking
-	const keys = Array.from(userScriptsRegistry.keys());
-	for (const key of keys) {
-		if (key.startsWith(`${configId}:`)) {
-			userScriptsRegistry.delete(key);
-		}
-	}
-
-	// 2. Explicitly remove from Browser Engine (Chrome/FF)
-	// We query the engine for all scripts and filter by our predictable prefix
+	// Query the engine for all scripts matching this config's prefix and unregister them.
+	// Querying directly handles SW restarts where in-memory state is lost.
 	const prefix = `usersite_${configId}_`.replace(/[^a-zA-Z0-9_]/g, '_');
 
 	if (browser.userScripts.getScripts) {
@@ -70,18 +59,22 @@ async function registerScriptsForConfig(configId) {
 	const storageResult = await browser.storage.local.get([storageKey]);
 	const fileStorage = storageResult[storageKey] || {};
 
+	// Init cache manager once before the loop (idempotent but avoids repeated calls)
+	try {
+		await cacheManager.init();
+	} catch (e) {
+		logger.error('CacheManager init failed:', e);
+	}
+
 	const scriptsToRegister = [];
 	for (let index = 0; index < config.js.length; index++) {
 		const item = config.js[index];
-		const scriptKey = `${configId}:${index}`;
 		const scriptId = sourceToId(config, item);
 
 		let jsConfig = [];
 		if (item.file) {
 			if (isFileHttp(item.file)) {
-				// Try to get from cache manager
 				try {
-					await cacheManager.init();
 					const content = await cacheManager.getCachedContent(configId, item.file);
 					if (content) {
 						jsConfig = [{ code: content }];
@@ -116,8 +109,6 @@ async function registerScriptsForConfig(configId) {
 				runAt: item.runAt || 'document_start',
 				world: 'MAIN'
 			});
-
-			userScriptsRegistry.set(scriptKey, scriptId);
 		}
 	}
 
@@ -151,13 +142,10 @@ async function injectConfigIntoMatchingTabs(configId) {
 
 	for (const tab of tabs) {
 		if (tab && tab.id) {
-			try {
-				await sendInjectToTab(tab.id, config);
-			} catch (_) {}
+			await sendInjectToTab(tab.id, config);
 		}
 	}
 }
-
 // Load configs on startup
 configManager.loadAllConfigs().then(async () => {
 	const configs = await configManager.getAllConfigs();
@@ -170,23 +158,8 @@ configManager.loadAllConfigs().then(async () => {
 	logger.error('Error loading configs on startup:', err);
 });
 
-// Initialize extension
+// Initialize extension on install or update
 browser.runtime.onInstalled.addListener(async () => {
-	console.log('UserSite extension installed');
-	console.debug(globalThis)
-
-	await configManager.loadAllConfigs();
-	const configs = await configManager.getAllConfigs();
-	for (const config of configs) {
-		if (config.enabled) {
-			await registerScriptsForConfig(config.id);
-		}
-	}
-});
-
-// Also load on startup (for when extension is already installed)
-browser.runtime.onStartup.addListener(async () => {
-	console.log('UserSite extension started');
 	await configManager.loadAllConfigs();
 	const configs = await configManager.getAllConfigs();
 	for (const config of configs) {
@@ -287,7 +260,6 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	if (message.type === 'ADD_CONFIG') {
 		(async () => {
 			try {
-				console.log('ADD_CONFIG request:', message.configId);
 				// Unregister existing scripts for this config before adding/updating
 				await unregisterScriptsForConfig(message.configId);
 				await configManager.addConfig(message.configId, message.config);
@@ -318,7 +290,6 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 						await browser.userScripts.unregister({ ids: usersiteIds });
 					}
 				}
-				userScriptsRegistry.clear();
 				const configs = await configManager.getAllConfigs();
 				for (const cfg of configs) {
 					if (cfg && cfg.enabled) {
@@ -335,23 +306,6 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		return true;
 	}
 
-	if (message.type === 'GET_TAB_ID') {
-		// Get tab ID from the sender
-		const tabId = sender.tab?.id;
-		if (tabId) {
-			sendResponse({ success: true, tabId: tabId });
-		} else {
-			// Fallback: try to get active tab
-			browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-				if (tabs && tabs[0]) {
-					sendResponse({ success: true, tabId: tabs[0].id });
-				} else {
-					sendResponse({ success: false, error: 'Could not determine tab ID' });
-				}
-			});
-		}
-	}
-
 	if (message.type === 'GET_CACHED_CONTENT') {
 		cacheManager.init().then(() => cacheManager.getCachedContent(message.configId, message.url))
 			.then(content => sendResponse({ success: true, content }))
@@ -366,6 +320,15 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 	if (message.type === 'CLEAR_LOGS') {
 		logger.clearLogs();
+		sendResponse({ success: true });
+		return true;
+	}
+
+	if (message.type === 'LOG') {
+		const { level, msg, data } = message;
+		if (level === 'error') logger.error(msg, data);
+		else if (level === 'warn') logger.warn(msg, data);
+		else logger.info(msg, data);
 		sendResponse({ success: true });
 		return true;
 	}

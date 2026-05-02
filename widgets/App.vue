@@ -82,6 +82,7 @@ import {
   clearLogs,
   saveConfigFiles,
   readStorageFile,
+  logToBackground,
 } from '../lib/dashboard-service.js';
 import {
   loadFromDirectoryHandle,
@@ -136,6 +137,13 @@ export default defineComponent({
       try {
         this.configs = await fetchConfigs();
         this.fsBannerVisible = await checkFsBannerNeeded(this.configs);
+        // Re-cache CDN assets for all enabled configs in the background.
+        // This ensures assets are available after extension reload or dashboard refresh.
+        for (const config of this.configs) {
+          if (config.enabled) {
+            this.downloadCdnAssets(config.id, config); // intentionally not awaited
+          }
+        }
       } catch (e) {
         console.error('Error loading configs:', e);
         this.showAlert('Error loading configurations: ' + e.message, 'Error');
@@ -158,6 +166,7 @@ export default defineComponent({
       try {
         await deleteConfig(configId);
         await deleteHandle(configId);
+        await cacheManager.clearConfigCache(configId);
         await this.loadConfigs();
       } catch (e) {
         console.error('Error deleting config:', e);
@@ -172,9 +181,14 @@ export default defineComponent({
           this.showAlert('No folder access saved for this configuration. Re-add using directory picker.', 'Warning');
           return;
         }
+        const hasPermission = await ensureHandlePermission(dirHandle);
+        if (!hasPermission) {
+          this.showAlert('Permission denied. Please click "Grant Access" to re-authorize folder access.', 'Warning');
+          return;
+        }
         const loaded = await loadFromDirectoryHandle(dirHandle);
         if (!loaded) {
-          this.showAlert('Failed to read folder. Please re-authorize access.', 'Warning');
+          this.showAlert('Failed to read folder. config.json not found.', 'Warning');
           return;
         }
         const fileStorage = await readFilesAsDataURLs(loaded.files);
@@ -266,8 +280,10 @@ export default defineComponent({
           this.cdnProgress[configId][url] = '(Cached)';
           setTimeout(() => { delete this.cdnProgress[configId]?.[url]; }, 3000);
         } catch (e) {
-          console.error(`Failed to cache ${url}:`, e);
+          console.error(`[UserSite] Failed to cache CDN asset: ${url}`, e);
+          logToBackground('error', `Failed to cache CDN asset: ${url}`, e);
           this.cdnProgress[configId][url] = '(Error)';
+          // Keep the error visible — don't auto-clear so the user can see it
         }
       }
     },

@@ -7,8 +7,11 @@ the manifest must be split into two versions:
 
 to be able to use in firefox,
 you must run `deno task firefox-web-ext`.
-it will create dedicated folder for firefox extension in `./firefox-web-ext`.
-from firefox extension page you have to load `manifest.json` from within that folder.
+it will create a dedicated folder for the firefox extension in `./firefox-web-ext`.
+from the firefox extension page you have to load `manifest.json` from within that folder.
+
+> **Note**: `firefox-manifest.json` references `browser.js` (flat path) while `manifest.json` uses `js/browser.js`.
+> This is intentional — `deno task firefox-web-ext` copies files flat into `./firefox-web-ext/`.
 
 > **Note**: Beginning in Chrome 144, all Chrome Extension APIs are also available under the `browser` namespace.
 

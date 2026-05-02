@@ -14,7 +14,16 @@ globalThis.configToId = function (config) {
 
 globalThis.sourceToId = function (config, item) {
     let id;
-    id = item.file || btoa(item.code).substring(0, 64)
+    if (item.file) {
+        id = item.file;
+    } else {
+        // btoa only handles Latin-1; encode to UTF-8 bytes first for safety
+        try {
+            id = btoa(unescape(encodeURIComponent(item.code))).substring(0, 64);
+        } catch (_) {
+            id = item.code.substring(0, 64);
+        }
+    }
     id = `${configToId(config)}_item_${id}`;
     id = toId(id);
     return id;

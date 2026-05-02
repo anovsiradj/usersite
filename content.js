@@ -17,9 +17,9 @@
   const injectedResources = new Map();
 
   // Message listener for injection requests
-  browser.runtime.onMessage.addListener((message, sender) => {
+  browser.runtime.onMessage.addListener((message) => {
     if (message.type === 'INJECT' && message.config) {
-      return injectConfig(message.config, sender.tab?.id)
+      return injectConfig(message.config)
         .then(() => ({ success: true }))
         .catch((error) => ({ success: false, error: error.message }));
     }
@@ -27,9 +27,9 @@
     if (message.type === 'CLEANUP' && message.configId) {
       const elements = document.querySelectorAll(`[data-usersite-config="${message.configId}"]`);
       elements.forEach(el => el.remove());
-      // Also clear from injectedResources map
-      for (const [key, value] of injectedResources.entries()) {
-        if (key.startsWith(`css-${message.configId}-`) || key.startsWith(`js-${message.configId}-`)) {
+      // Clear CSS entries from the injected resources map
+      for (const key of injectedResources.keys()) {
+        if (key.startsWith(`css-${message.configId}-`)) {
           injectedResources.delete(key);
         }
       }
@@ -128,26 +128,9 @@
     }
   }
 
-  // Inject all resources from config
-  async function injectConfig(config, tabId) {
+  // Inject CSS resources from config into the current page
+  async function injectConfig(config) {
     if (!config || !config.enabled) return;
-
-    // Get current tab ID for JS injection if not provided
-    // Content scripts can't access tabs API directly, so request from background
-    if (!tabId) {
-      tabId = await new Promise((resolve) => {
-        browser.runtime.sendMessage({ type: 'GET_TAB_ID' }, (response) => {
-          if (browser.runtime.lastError) {
-            console.error('Error getting tab ID:', browser.runtime.lastError);
-            resolve(null);
-          } else {
-            resolve(response?.tabId || null);
-          }
-        });
-      });
-    }
-
-    // Inject CSS files (CSS can be injected directly)
     if (config.css && Array.isArray(config.css)) {
       for (const [index, cssItem] of config.css.entries()) {
         const mergedItem = Object.assign({}, config.cssDefault || {}, typeof cssItem === 'object' ? cssItem : { file: cssItem });
@@ -209,8 +192,7 @@
           if (isMatch) {
             console.log(`[UserSite] Auto-injecting config: ${config.id}`);
             await injectConfig(config);
-          }
-        }
+          }        }
       }
     } catch (error) {
       console.error('[UserSite] Initialization error after retries:', error);

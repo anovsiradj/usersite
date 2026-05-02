@@ -98,7 +98,11 @@ $(function () {
       delete configToSave._files;
       delete configToSave._fsFiles;
       delete configToSave._fsHandle;
-      configToSave.source = _currentConfigData._fsFiles ? 'fs' : 'storage';
+      // 'fs' only when a real (persistent) FS handle exists — not for virtual handles
+      // from webkitdirectory input, which are not serializable and can't be rescanned.
+      const isRealHandle = _currentConfigData._fsHandle &&
+        _currentConfigData._fsHandle.constructor?.name !== 'VirtualDirectoryHandle';
+      configToSave.source = isRealHandle ? 'fs' : 'storage';
 
       await addConfig(configId, configToSave);
 
