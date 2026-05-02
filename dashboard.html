@@ -7,6 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>UserSite Dashboard</title>
   <link rel="stylesheet" href="web/vendor.css">
+  <link rel="stylesheet" href="icons/bi-font/bootstrap-icons.css">
   <link rel="stylesheet" href="dashboard.css">
 </head>
 
@@ -40,8 +41,8 @@
                 <div class="text-secondary" style="font-size: 0.75rem;">
                   Persistent access. Enables <strong>Rescan</strong> to reload files without re-adding.
                 </div>
-                <button id="pickDirBtn" class="btn btn-primary btn-sm mt-auto">
-                  Browse…
+                <button id="pickDirBtn" class="btn btn-primary btn-sm mt-auto d-flex align-items-center gap-1 justify-content-center">
+                  <i class="bi bi-folder2-open"></i> Browse…
                 </button>
               </div>
             </div>
@@ -53,8 +54,8 @@
                 <div class="text-secondary" style="font-size: 0.75rem;">
                   One-time import. No persistent access — <strong>Rescan will not work</strong>.
                 </div>
-                <label class="btn btn-outline-secondary btn-sm mt-auto mb-0">
-                  Browse…
+                <label class="btn btn-outline-secondary btn-sm mt-auto mb-0 d-flex align-items-center gap-1 justify-content-center">
+                  <i class="bi bi-upload"></i> Browse…
                   <input type="file" id="configFolder" class="d-none" webkitdirectory directory multiple>
                 </label>
               </div>
@@ -69,7 +70,9 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button id="saveConfigBtn" class="btn btn-primary" disabled>Save Configuration</button>
+          <button id="saveConfigBtn" class="btn btn-primary d-flex align-items-center gap-1" disabled>
+            <i class="bi bi-floppy"></i> Save Configuration
+          </button>
         </div>
       </div>
     </div>

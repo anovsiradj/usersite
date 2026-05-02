@@ -3,6 +3,7 @@
 		"addons-linter": "npm:addons-linter@^10.4.0",
 		"jquery": "npm:jquery@4",
 		"bootstrap": "npm:bootstrap@^5.3.8",
+		"bootstrap-icons": "npm:bootstrap-icons@^1.11.3",
 		"vue": "npm:vue@^3.5.33",
 		"web-ext": "npm:web-ext@^10.1.0"
 	},

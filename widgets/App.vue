@@ -7,18 +7,21 @@
         <h1 class="h3 mb-1 text-emphasis">UserSite</h1>
         <p class="text-secondary small mb-0">Minimalist script &amp; style injector</p>
       </div>
-      <button class="theme-toggle" title="Toggle color mode" @click="toggleTheme">🌓</button>
+      <button class="theme-toggle" :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
+        <i :class="isDark ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill'"></i>
+      </button>
     </header>
 
     <!-- FS Permission Banner -->
     <div v-if="fsBannerVisible"
-         class="alert alert-warning d-flex align-items-center justify-content-between mb-4 border-2 shadow-sm"
+         class="alert alert-warning d-flex align-items-center justify-content-between mb-4 shadow-sm"
          role="alert">
-      <span class="small">
-        extension does not have access to your folders. grant access to enable rescan.
-      </span>
-      <button class="btn btn-success btn-sm px-3 fw-bold" @click="grantFsAccess">
-        Grant Access
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
+        <span class="small">Extension does not have access to your folders. Grant access to enable Rescan.</span>
+      </div>
+      <button class="btn btn-warning btn-sm d-flex align-items-center gap-1 ms-3 flex-shrink-0" @click="grantFsAccess">
+        <i class="bi bi-unlock-fill"></i> Grant Access
       </button>
     </div>
 
@@ -26,13 +29,13 @@
     <div class="d-flex justify-content-center gap-2 mb-4">
       <button class="btn btn-primary d-flex align-items-center gap-2 px-4 shadow-sm"
               data-bs-toggle="modal" data-bs-target="#addConfigModal">
-        <span class="fs-5 lh-1">+</span> Add Configuration
+        <i class="bi bi-plus-lg"></i> Add Configuration
       </button>
       <button class="btn btn-outline-secondary d-flex align-items-center gap-2 shadow-sm"
               :disabled="loading"
               @click="reloadAll"
               title="Re-register all scripts and re-inject CSS into open tabs">
-        <span>↻</span> Re-sync
+        <i class="bi bi-arrow-clockwise"></i> Re-sync
       </button>
     </div>
 
@@ -108,6 +111,7 @@ export default defineComponent({
       logs: [],
       loading: true,
       fsBannerVisible: false,
+      isDark: document.documentElement.getAttribute('data-bs-theme') === 'dark',
       // { [configId]: { [url]: '42%' | '(Cached)' | '(Error)' } }
       cdnProgress: {},
     };
@@ -333,6 +337,7 @@ export default defineComponent({
       const next = current === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-bs-theme', next);
       localStorage.setItem('usersite-theme', next);
+      this.isDark = next === 'dark';
     },
 
     // ── Alert helper — modal for errors/warnings ─────────────────────────────

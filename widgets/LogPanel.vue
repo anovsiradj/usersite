@@ -6,7 +6,8 @@
          role="button"
          @click="open = !open">
       <div class="d-flex align-items-center gap-2">
-        <span class="small fw-bold text-body-secondary">Extension Logs</span>
+        <i class="bi bi-terminal text-body-secondary"></i>
+        <span class="small fw-semibold text-body-secondary">Logs</span>
         <span v-if="errorCount > 0"
               class="badge text-bg-danger log-count-badge">
           {{ errorCount }}
@@ -18,27 +19,33 @@
       </div>
       <div class="d-flex align-items-center gap-2" @click.stop>
         <button v-if="open && logs.length > 0"
-                class="btn btn-outline-secondary btn-sm py-0 px-2 log-clear-btn"
+                class="btn btn-outline-secondary btn-sm icon-btn log-clear-btn"
+                title="Clear logs"
                 @click="$emit('clear')">
-          Clear
+          <i class="bi bi-x-lg"></i>
         </button>
-        <span class="text-secondary small log-panel-arrow"
-              :class="{ 'arrow-open': open }">▼</span>
+        <i class="bi bi-chevron-down log-panel-arrow text-secondary"
+           :class="{ 'rotated': open }"></i>
       </div>
     </div>
 
     <!-- Log list — shown when open -->
     <ul v-if="open"
-        class="list-unstyled small border rounded p-2 bg-body-tertiary mb-0 log-list mt-2">
-      <li v-if="logs.length === 0" class="text-muted log-entry">No logs yet.</li>
+        class="list-unstyled mb-0 log-list mt-2 border rounded bg-body-tertiary p-2">
+      <li v-if="logs.length === 0"
+          class="text-muted log-entry d-flex align-items-center gap-2">
+        <i class="bi bi-info-circle"></i> No logs yet.
+      </li>
       <li v-else
           v-for="(entry, i) in logs"
           :key="i"
-          class="log-entry"
+          class="log-entry d-flex align-items-start gap-2"
           :class="levelClass(entry.level)">
-        [{{ formatTime(entry.timestamp) }}]
-        [{{ entry.level.toUpperCase() }}]
-        {{ entry.message }}{{ formatData(entry.data) }}
+        <i class="bi flex-shrink-0 mt-1" :class="levelIcon(entry.level)"></i>
+        <span>
+          <span class="text-body-secondary me-1">{{ formatTime(entry.timestamp) }}</span>
+          {{ entry.message }}{{ formatData(entry.data) }}
+        </span>
       </li>
     </ul>
 
@@ -58,10 +65,7 @@ export default defineComponent({
   emits: ['clear'],
 
   data() {
-    return {
-      // Auto-open when there are errors; otherwise collapsed by default
-      open: false,
-    };
+    return { open: false };
   },
 
   computed: {
@@ -71,7 +75,6 @@ export default defineComponent({
   },
 
   watch: {
-    // Auto-open the panel when a new error arrives
     errorCount(newVal, oldVal) {
       if (newVal > oldVal) this.open = true;
     },
@@ -82,6 +85,12 @@ export default defineComponent({
       return level === 'error' ? 'text-danger'
            : level === 'warn'  ? 'text-warning'
            : 'text-muted';
+    },
+
+    levelIcon(level) {
+      return level === 'error' ? 'bi-x-circle-fill'
+           : level === 'warn'  ? 'bi-exclamation-circle-fill'
+           : 'bi-info-circle';
     },
 
     formatTime(ts) {

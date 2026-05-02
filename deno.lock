@@ -8,6 +8,7 @@
     "npm:@types/bootstrap@*": "5.2.10",
     "npm:@types/jquery@*": "3.5.33",
     "npm:addons-linter@^10.4.0": "10.4.0",
+    "npm:bootstrap-icons@^1.11.3": "1.13.1",
     "npm:bootstrap@^5.3.8": "5.3.8_@popperjs+core@2.11.8",
     "npm:esbuild-plugin-vue3@*": "0.5.1_vue@3.5.33__typescript@4.9.5",
     "npm:esbuild@*": "0.27.7",
@@ -783,6 +784,9 @@
     },
     "boolbase@1.0.0": {
       "integrity": "sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww=="
+    },
+    "bootstrap-icons@1.13.1": {
+      "integrity": "sha512-ijombt4v6bv5CLeXvRWKy7CuM3TRTuPEuGaGKvTV5cz65rQSY8RQ2JcHt6b90cBBAC7s8fsf2EkQDldzCoXUjw=="
     },
     "bootstrap@5.3.8_@popperjs+core@2.11.8": {
       "integrity": "sha512-HP1SZDqaLDPwsNiqRqi5NcP0SSXciX2s9E+RyqJIIqGo+vJeN5AJVM98CXmW/Wux0nQ5L7jeWUdplCEf0Ee+tg==",
@@ -2479,6 +2483,7 @@
       "npm:@types/bootstrap@*",
       "npm:@types/jquery@*",
       "npm:addons-linter@^10.4.0",
+      "npm:bootstrap-icons@^1.11.3",
       "npm:bootstrap@^5.3.8",
       "npm:jquery@4",
       "npm:vue@^3.5.33",
