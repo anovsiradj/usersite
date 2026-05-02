@@ -55,6 +55,25 @@
   transition: transform 0.2s ease;
 }
 
+/* ── Status dot ───────────────────────────────────────────────────────────── */
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot--on  { background-color: var(--bs-success); }
+.status-dot--off { background-color: var(--bs-secondary); opacity: 0.5; }
+
+/* Toggle label */
+.toggle-label {
+  font-size: 0.7rem;
+  min-width: 3rem;
+}
+
 /* ── Badges ───────────────────────────────────────────────────────────────── */
 
 .match-badge {
@@ -66,6 +85,34 @@
 }
 
 /* ── Log panel ────────────────────────────────────────────────────────────── */
+
+.log-panel-header {
+  cursor: pointer;
+  user-select: none;
+  padding: 0.25rem 0;
+}
+
+.log-panel-header:hover .small {
+  color: var(--bs-emphasis-color) !important;
+}
+
+.log-panel-arrow {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  font-size: 0.7rem;
+}
+
+.log-panel-arrow.arrow-open {
+  transform: rotate(-180deg);
+}
+
+.log-count-badge {
+  font-size: 0.65rem;
+}
+
+.log-clear-btn {
+  font-size: 0.7rem;
+}
 
 .log-list {
   max-height: 200px;

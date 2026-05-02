@@ -58,3 +58,9 @@ contributions are welcome! Please feel free to submit issues or pull requests.
 - Configurations are independent and can be enabled/disabled individually
 - Match patterns use a simplified wildcard matching system compatible with Chrome's match patterns
 - The extension automatically reloads configurations when tabs are updated
+
+## Links
+
+- https://developer.mozilla.org/en-US/docs/Web/API/File_System_API
+- https://developer.mozilla.org/en-US/docs/Web/API/Window/showOpenFilePicker
+- https://developer.chrome.com/docs/capabilities/web-apis/file-system-access

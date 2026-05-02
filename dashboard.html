@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 
 <head>
@@ -14,14 +15,15 @@
   <!-- Vue app mounts here — content is rendered by widgets/App.vue -->
   <div id="app"></div>
 
+  <!-- Toast container for non-blocking success feedback -->
+  <div id="toastContainer" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;"></div>
 
   <!-- =====================================================================
        Modals (outside #app — Bootstrap modals work better at body level)
        ===================================================================== -->
 
   <!-- Add Config Modal -->
-  <div id="addConfigModal" class="modal fade" tabindex="-1"
-       aria-labelledby="addConfigModalLabel" aria-hidden="true">
+  <div id="addConfigModal" class="modal fade" tabindex="-1" aria-labelledby="addConfigModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
@@ -29,17 +31,39 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <div class="mb-3">
-            <label for="configFolder" class="form-label">Select Folder with config.json:</label>
-            <input type="file" id="configFolder" class="form-control" webkitdirectory directory multiple>
-            <div class="form-text">Select a folder containing config.json and your JS/CSS files</div>
+          <div class="row g-3 mb-3">
+
+            <!-- Option A: File System API (persistent, supports Rescan) -->
+            <div class="col-6">
+              <div class="border rounded p-3 h-100 d-flex flex-column gap-2">
+                <div class="fw-semibold small">Choose Folder (File System Access API)</div>
+                <div class="text-secondary" style="font-size: 0.75rem;">
+                  Persistent access. Enables <strong>Rescan</strong> to reload files without re-adding.
+                </div>
+                <button id="pickDirBtn" class="btn btn-primary btn-sm mt-auto">
+                  Browse…
+                </button>
+              </div>
+            </div>
+
+            <!-- Option B: File input (one-time, no Rescan) -->
+            <div class="col-6">
+              <div class="border rounded p-3 h-100 d-flex flex-column gap-2">
+                <div class="fw-semibold small">Upload Folder (Standard Input File)</div>
+                <div class="text-secondary" style="font-size: 0.75rem;">
+                  One-time import. No persistent access — <strong>Rescan will not work</strong>.
+                </div>
+                <label class="btn btn-outline-secondary btn-sm mt-auto mb-0">
+                  Browse…
+                  <input type="file" id="configFolder" class="d-none" webkitdirectory directory multiple>
+                </label>
+              </div>
+            </div>
+
           </div>
-          <div class="mb-3">
-            <button id="pickDirBtn" class="btn btn-secondary">Pick Folder (File System API)</button>
-            <div class="form-text">Use the File System API for persistent folder access and rescan</div>
-          </div>
-          <div id="configPreview" class="mt-3" hidden>
-            <h6>Config Preview:</h6>
+
+          <div id="configPreview" class="mt-2" hidden>
+            <h6 class="small fw-bold text-body-secondary mb-1">Config Preview:</h6>
             <pre id="configPreviewContent" class="p-2 border rounded"></pre>
           </div>
         </div>
@@ -52,8 +76,7 @@
   </div>
 
   <!-- Source Viewer Modal -->
-  <div id="sourceViewerModal" class="modal fade" tabindex="-1"
-       aria-labelledby="sourceViewerModalLabel" aria-hidden="true">
+  <div id="sourceViewerModal" class="modal fade" tabindex="-1" aria-labelledby="sourceViewerModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
@@ -61,8 +84,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body p-0">
-          <pre id="sourceContent"
-               class="m-0 p-3 bg-body-tertiary small source-viewer-pre"></pre>
+          <pre id="sourceContent" class="m-0 p-3 bg-body-tertiary small source-viewer-pre"></pre>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -72,8 +94,7 @@
   </div>
 
   <!-- Alert Modal -->
-  <div id="alertModal" class="modal fade" tabindex="-1"
-       aria-labelledby="alertModalLabel" aria-hidden="true">
+  <div id="alertModal" class="modal fade" tabindex="-1" aria-labelledby="alertModalLabel" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -101,4 +122,5 @@
   <script type="module" src="dashboard.js"></script>
 
 </body>
+
 </html>

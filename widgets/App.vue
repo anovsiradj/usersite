@@ -30,8 +30,9 @@
       </button>
       <button class="btn btn-outline-secondary d-flex align-items-center gap-2 shadow-sm"
               :disabled="loading"
-              @click="reloadAll">
-        <span>↻</span> Reload All
+              @click="reloadAll"
+              title="Re-register all scripts and re-inject CSS into open tabs">
+        <span>↻</span> Re-sync
       </button>
     </div>
 
@@ -198,7 +199,7 @@ export default defineComponent({
         await addConfig(configId, configToSave);
         await this.loadConfigs();
         await this.downloadCdnAssets(configId, configToSave);
-        this.showAlert('Configuration rescan completed', 'Success');
+        this.showToast('Configuration rescan completed');
       } catch (e) {
         console.error('Error rescanning config:', e);
         this.showAlert('Error rescanning configuration: ' + e.message, 'Error');
@@ -313,7 +314,7 @@ export default defineComponent({
       try {
         const entries = await listPersistedHandles();
         if (!entries.length) {
-          this.showAlert('No folder access saved. Use "Pick Folder" in the Add Configuration modal.', 'Info');
+          this.showAlert('No folder access saved. Use "Choose Folder" in the Add Configuration modal.', 'Info');
           return;
         }
         for (const entry of entries) {
@@ -334,12 +335,32 @@ export default defineComponent({
       localStorage.setItem('usersite-theme', next);
     },
 
-    // ── Alert helper (uses Bootstrap modal from vendor.js) ────────────────────
+    // ── Alert helper — modal for errors/warnings ─────────────────────────────
 
     showAlert(message, title = 'Notice') {
       $('#alertModalLabel').text(title);
       $('#alertModalBody').text(message);
       new bootstrap.Modal(document.getElementById('alertModal')).show();
+    },
+
+    // ── Toast helper — non-blocking feedback for success ──────────────────────
+
+    showToast(message, type = 'success') {
+      const bgClass = type === 'success' ? 'text-bg-success'
+                    : type === 'warning' ? 'text-bg-warning'
+                    : 'text-bg-danger';
+      const $toast = $(`
+        <div class="toast align-items-center ${bgClass} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+          <div class="d-flex">
+            <div class="toast-body small">${$('<span>').text(message).html()}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        </div>
+      `);
+      $('#toastContainer').append($toast);
+      const t = new bootstrap.Toast($toast[0], { delay: 3000 });
+      t.show();
+      $toast[0].addEventListener('hidden.bs.toast', () => $toast.remove());
     },
   },
 });

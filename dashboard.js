@@ -116,7 +116,7 @@ $(function () {
       }));
 
       bootstrap.Modal.getInstance(document.getElementById('addConfigModal')).hide();
-      _showAlert('Configuration saved successfully!', 'Success');
+      _showToast('Configuration saved successfully!');
     } catch (err) {
       console.error('Error saving config:', err);
       _showAlert('Error saving configuration: ' + err.message, 'Error');
@@ -141,5 +141,20 @@ $(function () {
     $('#alertModalLabel').text(title);
     $('#alertModalBody').text(message);
     new bootstrap.Modal(document.getElementById('alertModal')).show();
+  }
+
+  function _showToast(message) {
+    const $toast = $(`
+      <div class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+          <div class="toast-body small">${$('<span>').text(message).html()}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      </div>
+    `);
+    $('#toastContainer').append($toast);
+    const t = new bootstrap.Toast($toast[0], { delay: 3000 });
+    t.show();
+    $toast[0].addEventListener('hidden.bs.toast', () => $toast.remove());
   }
 });

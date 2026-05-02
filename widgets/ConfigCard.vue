@@ -10,7 +10,12 @@
 
           <!-- Name + description -->
           <div class="col">
-            <div class="fw-bold text-emphasis text-truncate">{{ config.name }}</div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="status-dot"
+                    :class="config.enabled ? 'status-dot--on' : 'status-dot--off'"
+                    :title="config.enabled ? 'Enabled' : 'Disabled'"></span>
+              <div class="fw-bold text-emphasis text-truncate">{{ config.name }}</div>
+            </div>
             <div v-if="config.description"
                  class="text-secondary text-truncate mt-1 small">
               {{ config.description }}
@@ -20,25 +25,22 @@
           <!-- Controls -->
           <div class="col-auto">
             <div class="d-flex align-items-center gap-2 header-actions" @click.stop>
-              <div class="form-check form-switch m-0 p-0">
+              <div class="form-check form-switch m-0 p-0 d-flex align-items-center gap-2">
                 <input class="form-check-input ms-0 mt-0"
                        type="checkbox"
                        role="switch"
                        :checked="config.enabled"
                        @change="$emit('toggle', config.id, $event.target.checked)">
+                <span class="small text-secondary toggle-label">
+                  {{ config.enabled ? 'On' : 'Off' }}
+                </span>
               </div>
-              <div class="btn-group btn-group-sm">
-                <button class="btn btn-outline-secondary py-0 px-2"
-                        title="Rescan folder"
-                        @click.stop="$emit('rescan', config.id)">
-                  Rescan
-                </button>
-                <button class="btn btn-outline-danger py-0 px-2"
-                        title="Delete configuration"
-                        @click.stop="confirmDelete">
-                  Delete
-                </button>
-              </div>
+              <button v-if="config.source === 'fs'"
+                      class="btn btn-outline-secondary btn-sm py-0 px-2"
+                      title="Rescan folder to reload files"
+                      @click.stop="$emit('rescan', config.id)">
+                Rescan
+              </button>
             </div>
           </div>
 
@@ -95,6 +97,14 @@
               </span>
             </div>
           </div>
+        </div>
+
+        <!-- Danger zone -->
+        <div class="mt-3 pt-3 border-top d-flex justify-content-end">
+          <button class="btn btn-outline-danger btn-sm"
+                  @click.stop="confirmDelete">
+            Delete Configuration
+          </button>
         </div>
 
       </div>

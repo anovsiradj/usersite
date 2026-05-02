@@ -16,8 +16,7 @@
     "npm:unplugin-vue@*": "7.2.0_vue@3.5.33__typescript@4.9.5_esbuild@0.27.7",
     "npm:vue@*": "3.5.33_typescript@4.9.5",
     "npm:vue@^3.5.33": "3.5.33_typescript@4.9.5",
-    "npm:web-ext@^10.1.0": "10.1.0",
-    "npm:webextension-polyfill@0.12": "0.12.0"
+    "npm:web-ext@^10.1.0": "10.1.0"
   },
   "jsr": {
     "@std/fs@1.0.23": {
@@ -2350,9 +2349,6 @@
       ],
       "bin": true
     },
-    "webextension-polyfill@0.12.0": {
-      "integrity": "sha512-97TBmpoWJEE+3nFBQ4VocyCdLKfw54rFaJ6EVQYLBCXqCIpLSZkwGgASpv4oPt9gdKCJ80RJlcmNzNn008Ag6Q=="
-    },
     "webpack-virtual-modules@0.6.2": {
       "integrity": "sha512-66/V2i5hQanC51vBQKPH4aI8NMAcBW59FVBs+rC7eGHupMyfn34q7rZIE+ETlJ+XTevqfUhVVBgSUNSW2flEUQ=="
     },
@@ -2486,8 +2482,7 @@
       "npm:bootstrap@^5.3.8",
       "npm:jquery@4",
       "npm:vue@^3.5.33",
-      "npm:web-ext@^10.1.0",
-      "npm:webextension-polyfill@0.12"
+      "npm:web-ext@^10.1.0"
     ]
   }
 }

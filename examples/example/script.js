@@ -23,6 +23,8 @@
   banner.textContent = 'UserSite: Custom script is active!';
   document.body.insertBefore(banner, document.body.firstChild);
 
+  document.body.style.paddingTop = '100px'
+
   // Example: Log all links
   const links = document.querySelectorAll('a');
   console.debug(`UserSite: Found ${links.length} links on this page`);

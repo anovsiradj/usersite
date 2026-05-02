@@ -33,13 +33,20 @@ const cacheManager = new CacheManager();
 async function unregisterScriptsForConfig(configId) {
 	// Query the engine for all scripts matching this config's prefix and unregister them.
 	// Querying directly handles SW restarts where in-memory state is lost.
-	const prefix = `usersite_${configId}_`.replace(/[^a-zA-Z0-9_]/g, '_');
+	//
+	// Current registered ID format: usersite_config_{configId}_item_{sourceId}
+	// Legacy format (pre-usersite_ prefix fix): config_{configId}_item_{sourceId}
+	// Both formats are matched to handle configs registered before the prefix was added.
+	const configPart = toId(`config_${configId}`);
+	const prefixNew = `usersite_${configPart}_item_`;  // current format
+	const prefixOld = `${configPart}_item_`;            // legacy format
 
 	if (browser.userScripts.getScripts) {
-		const scripts = await browser.userScripts.getScripts();
-		const idsToUnregister = scripts
-			.map(s => s.id)
-			.filter(id => id.startsWith(prefix));
+		const allScripts = await browser.userScripts.getScripts();
+		const allIds = allScripts.map(s => s.id);
+		const idsToUnregister = allIds.filter(id =>
+			id.startsWith(prefixNew) || id.startsWith(prefixOld)
+		);
 
 		if (idsToUnregister.length > 0) {
 			await browser.userScripts.unregister({ ids: idsToUnregister });
@@ -103,7 +110,7 @@ async function registerScriptsForConfig(configId) {
 
 		if (jsConfig.length > 0) {
 			scriptsToRegister.push({
-				id: scriptId,
+				id: `usersite_${scriptId}`,
 				matches: config.matches,
 				js: jsConfig,
 				runAt: item.runAt || 'document_start',
@@ -126,9 +133,7 @@ async function sendInjectToTab(tabId, config) {
 	try {
 		await browser.tabs.sendMessage(tabId, { type: 'INJECT', config });
 	} catch (_) {
-		// If message fails, it usually means content script is not ready or tab is closing.
-		// Since content.js is now a content script, we don't need manual injection fallback.
-		// We can just log the error or ignore it.
+		// Message fails when content script is not ready or tab is closing — safe to ignore
 		console.debug(`Could not send inject message to tab ${tabId}`);
 	}
 }
@@ -193,14 +198,8 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 			try {
 				await configManager.toggleConfig(message.configId, message.enabled);
 				if (message.enabled === false) {
-					// JS cleanup: unregisterScriptsForConfig handles userScripts API
-					// CSS cleanup: CLEANUP message removes <style> elements in content.js
-					// Cleanup parity confirmed: both JS and CSS paths are cleaned up on TOGGLE_OFF
-
-					// 1. Unregister from Chrome/FF engine
 					await unregisterScriptsForConfig(message.configId);
 
-					// 2. Notify tabs to cleanup
 					const config = configManager.getConfig(message.configId);
 					if (config && config.matches) {
 						const tabs = await browser.tabs.query({ url: config.matches });
@@ -226,17 +225,11 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	if (message.type === 'DELETE_CONFIG') {
 		(async () => {
 			try {
-				// JS cleanup: unregisterScriptsForConfig handles userScripts API
-				// CSS cleanup: CLEANUP message removes <style> elements in content.js
-				// Cleanup parity confirmed: both JS and CSS paths are cleaned up on DELETE_CONFIG
-
-				// 1. Get the config before deleting it so we know its matches for cleanup
+				// Get config before deleting so we know its matches for CSS cleanup
 				const config = configManager.getConfig(message.configId);
 
-				// 2. Unregister from Chrome/FF engine
 				await unregisterScriptsForConfig(message.configId);
 
-				// 3. Notify matching tabs to remove injected CSS/DOM elements
 				if (config && config.matches) {
 					const tabs = await browser.tabs.query({ url: config.matches });
 					for (const tab of tabs) {
@@ -246,7 +239,6 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 					}
 				}
 
-				// 4. Finally remove from storage
 				await configManager.deleteConfig(message.configId);
 				sendResponse({ success: true });
 			} catch (error) {
@@ -280,12 +272,13 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		(async () => {
 			try {
 				await configManager.loadAllConfigs();
-				// JS cleanup: Query engine directly instead of relying on in-memory registry (which is lost on SW restart)
-				// CSS re-inject: injectConfigIntoMatchingTabs re-injects CSS into matching tabs after reload
-				// Cleanup parity confirmed: JS engine scripts are unregistered and CSS is re-injected on RELOAD_CONFIGS
+				// Unregister all registered scripts — query engine directly to handle SW restarts.
+				// Match both current format (usersite_*) and legacy format (config_*_item_*).
 				if (browser.userScripts && browser.userScripts.getScripts) {
 					const allScripts = await browser.userScripts.getScripts();
-					const usersiteIds = allScripts.map(s => s.id).filter(id => id.startsWith('usersite_'));
+					const usersiteIds = allScripts.map(s => s.id).filter(id =>
+						id.startsWith('usersite_') || /^config_[^_].*_item_/.test(id)
+					);
 					if (usersiteIds.length > 0) {
 						await browser.userScripts.unregister({ ids: usersiteIds });
 					}

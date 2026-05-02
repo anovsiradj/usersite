@@ -190,9 +190,9 @@
           const isMatch = patterns.some(pattern => matchesPattern(currentUrl, pattern));
           
           if (isMatch) {
-            console.log(`[UserSite] Auto-injecting config: ${config.id}`);
             await injectConfig(config);
-          }        }
+          }
+        }
       }
     } catch (error) {
       console.error('[UserSite] Initialization error after retries:', error);
