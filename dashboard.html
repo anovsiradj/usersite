@@ -1,192 +1,104 @@
 <!DOCTYPE html>
-
 <html lang="en">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>UserSite Dashboard</title>
-
   <link rel="stylesheet" href="web/vendor.css">
   <link rel="stylesheet" href="dashboard.css">
 </head>
 
 <body>
-  <div class="container-md py-4">
-    <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
-      <div class="header-main">
-        <h1 class="h3 mb-1 text-emphasis">UserSite</h1>
-        <p class="text-secondary small mb-0">Minimalist script & style injector</p>
-      </div>
-      <button id="themeToggle" class="theme-toggle" title="Toggle color mode">
-        🌓
-      </button>
-    </header>
 
-    <div id="fsBanner" class="alert alert-warning d-flex align-items-center justify-content-between mb-4 border-2 shadow-sm" role="alert" hidden>
-      <div class="d-flex align-items-center">
-        <span class="small">extension does not have access to your folders. grant access to enable rescan.</span>
-      </div>
-      <button id="fsGrantBtn" class="btn btn-success btn-sm px-3 fw-bold">Grant Access</button>
-    </div>
+  <!-- Vue app mounts here — content is rendered by widgets/App.vue -->
+  <div id="app"></div>
 
-    <div class="d-flex justify-content-center gap-2 mb-4">
-      <button id="addConfigBtn" class="btn btn-primary d-flex align-items-center gap-2 px-4 shadow-sm">
-        <span class="fs-5 mb-0">+</span>
-        Add Configuration
-      </button>
-      <button id="reloadBtn" class="btn btn-outline-secondary d-flex align-items-center gap-2 shadow-sm">
-        <span>↻</span>
-        Reload All
-      </button>
-    </div>
 
-    <div id="configList" class="accordion shadow-sm border rounded overflow-hidden">
-      <div class="text-center py-5 text-secondary">
-        <div class="spinner-border spinner-border-sm mb-2" role="status"></div>
-        <div class="small">Loading configurations...</div>
-      </div>
-    </div>
+  <!-- =====================================================================
+       Modals (outside #app — Bootstrap modals work better at body level)
+       ===================================================================== -->
 
-    <div id="logPanel" class="mt-4">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6 class="mb-0 text-secondary small fw-bold">Extension Logs</h6>
-        <button id="clearLogsBtn" class="btn btn-outline-secondary btn-sm py-0">Clear Logs</button>
-      </div>
-      <ul id="logList" class="list-unstyled small border rounded p-2 bg-body-tertiary mb-0" style="max-height: 200px; overflow-y: auto; font-family: monospace;"></ul>
-    </div>
-
-    <!-- Source Viewer Modal -->
-    <div id="sourceViewerModal" class="modal fade" tabindex="-1" aria-labelledby="sourceViewerModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="sourceViewerModalLabel">Source Viewer</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+  <!-- Add Config Modal -->
+  <div id="addConfigModal" class="modal fade" tabindex="-1"
+       aria-labelledby="addConfigModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="addConfigModalLabel">Add Configuration</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="configFolder" class="form-label">Select Folder with config.json:</label>
+            <input type="file" id="configFolder" class="form-control" webkitdirectory directory multiple>
+            <div class="form-text">Select a folder containing config.json and your JS/CSS files</div>
           </div>
-          <div class="modal-body p-0">
-            <pre id="sourceContent" class="m-0 p-3 bg-body-tertiary small" style="min-height: 300px; white-space: pre-wrap; word-break: break-all;"></pre>
+          <div class="mb-3">
+            <button id="pickDirBtn" class="btn btn-secondary">Pick Folder (File System API)</button>
+            <div class="form-text">Use the File System API for persistent folder access and rescan</div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <div id="configPreview" class="mt-3" hidden>
+            <h6>Config Preview:</h6>
+            <pre id="configPreviewContent" class="p-2 border rounded"></pre>
           </div>
         </div>
-      </div>
-    </div>
-
-    <div id="addConfigModal" class="modal fade" tabindex="-1" aria-labelledby="addConfigModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="addConfigModalLabel">Add Configuration</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label for="configFolder" class="form-label">Select Folder with config.json:</label>
-              <input type="file" id="configFolder" class="form-control" webkitdirectory directory multiple>
-              <div class="form-text">Select a folder containing config.json and your JS/CSS files</div>
-            </div>
-            <div class="mb-3">
-              <button id="pickDirBtn" class="btn btn-secondary">Pick Folder (File System API)</button>
-              <div class="form-text">Use the File System API for persistent folder access and rescan</div>
-            </div>
-            <div id="configPreview" class="config-preview mt-3" style="display:none;">
-              <h6>Config Preview:</h6>
-              <pre id="configPreviewContent" class="bg-light p-2 border rounded"></pre>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button id="saveConfigBtn" class="btn btn-primary" disabled>Save Configuration</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div id="alertModal" class="modal fade" tabindex="-1" aria-labelledby="alertModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="alertModalLabel">Notice</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div id="alertModalBody"></div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
-          </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button id="saveConfigBtn" class="btn btn-primary" disabled>Save Configuration</button>
         </div>
       </div>
     </div>
   </div>
 
-  <template id="configCardTemplate">
-    <div class="card config-card mb-3">
-      <div class="card-header d-flex align-items-center p-3 cursor-pointer select-none config-card-header" style="cursor: pointer;">
-        <div class="flex-grow-1">
-          <div class="row align-items-center g-3">
-            <div class="col-md-9">
-              <div class="fw-bold text-emphasis text-truncate" data-template-text="name"></div>
-              <div class="small text-secondary text-truncate mt-1" style="font-size: 0.75rem;" data-template-text="description"></div>
-            </div>
-            <div class="col-md-3">
-              <div class="d-flex align-items-center justify-content-end gap-2 px-2 header-actions">
-                <div class="form-check form-switch m-0 p-0" style="min-height: auto;">
-                  <input class="form-check-input ms-0 mt-0 config-toggle" type="checkbox" role="switch">
-                </div>
-                <div class="btn-group btn-group-sm">
-                  <button class="btn btn-outline-secondary py-0 px-2 rescan-btn" title="Rescan folder">Rescan</button>
-                  <button class="btn btn-outline-danger py-0 px-2 delete-btn" title="Delete configuration">Delete</button>
-                </div>
-              </div>
-            </div>
-          </div>
+  <!-- Source Viewer Modal -->
+  <div id="sourceViewerModal" class="modal fade" tabindex="-1"
+       aria-labelledby="sourceViewerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="sourceViewerModalLabel">Source Viewer</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="ms-3 toggle-arrow" style="transition: transform 0.2s ease;">
-          <span class="small">▼</span>
+        <div class="modal-body p-0">
+          <pre id="sourceContent"
+               class="m-0 p-3 bg-body-tertiary small source-viewer-pre"></pre>
         </div>
-      </div>
-      <div class="card-body bg-body-tertiary border-top config-card-body" style="display: none;">
-        <div class="mb-3">
-          <label class="small fw-bold text-body-secondary mb-1 d-block">Matches:</label>
-          <div class="d-flex flex-wrap gap-1" data-template-html="matches"></div>
-        </div>
-        <div class="row">
-          <div class="col-12">
-            <label class="small fw-bold text-body-secondary mb-2 d-block">Sources:</label>
-            <div class="d-flex flex-wrap gap-2 source-list" data-template-html="sources"></div>
-          </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
         </div>
       </div>
     </div>
-  </template>
+  </div>
 
-  <template id="matchBadgeTemplate">
-    <span class="badge rounded-pill text-bg-light border small px-2 py-1" style="font-size: 0.7rem;" data-template-text="match"></span>
-  </template>
-
-  <template id="sourceBadgeTemplate">
-    <div class="badge text-bg-secondary p-1 px-2 d-flex align-items-center gap-1 fw-normal source-badge cursor-pointer" style="cursor: pointer;" title="Click to view source">
-      <span data-template-text="icon"></span>
-      <span data-template-text="name"></span>
+  <!-- Alert Modal -->
+  <div id="alertModal" class="modal fade" tabindex="-1"
+       aria-labelledby="alertModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="alertModalLabel">Notice</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="alertModalBody"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+        </div>
+      </div>
     </div>
-  </template>
+  </div>
 
-  <template id="alertTemplate">
-    <div class="alert alert-primary alert-dismissible fade show d-flex align-items-center gap-2" role="alert">
-      <span class="alert-icon"></span>
-      <span class="alert-message flex-grow-1"></span>
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-  </template>
 
+  <!-- =====================================================================
+       Scripts
+       ===================================================================== -->
   <script src="js/helper.js"></script>
-  <script src="js/widget.js"></script>
   <script src="js/browser.js"></script>
   <script src="web/vendor.js"></script>
+  <script src="web/dashboard.iife.js"></script>
   <script type="module" src="dashboard.js"></script>
-</body>
 
+</body>
 </html>

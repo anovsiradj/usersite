@@ -1,3 +1,5 @@
+import { copy } from "jsr:@std/fs/copy";
+
 /**
  * @link https://docs.deno.com/api/deno/~/Deno.symlink
  */
@@ -27,6 +29,7 @@ async function main() {
 	for (let [k, v] of Object.entries(files)) {
 		v ??= k
 
+		/*
 		try {
 			await Deno.remove(`${root}/${v}`);
 		} catch (error) {
@@ -38,14 +41,21 @@ async function main() {
 		} catch (error) {
 			console.debug(`[SKIP] create: ${root}/${v}`)
 		}
+		*/
 
+		await copy(k, `${root}/${v}`, { overwrite: true })
 	}
 
 	for (let [k, v] of Object.entries(folders)) {
 		v ??= k
+
+		/*
 		Deno.symlink(k, `${root}/${v}`, {
 			type: 'junction',
 		}).catch(() => console.debug(`[SKIP] ${root}/${v}`))
+		*/
+
+		await copy(k, `${root}/${v}`, { overwrite: true })
 	}
 }
 
